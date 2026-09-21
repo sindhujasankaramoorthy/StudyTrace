@@ -1,7 +1,6 @@
 /**
- * StudyTrace - API Client & Data Sync Service (Build 4)
- * Handles REST communication with authentication tokens,
- * automatically syncing with MongoDB Cloud when logged in.
+ * StudyTrace - API Client & Data Sync Service (Build 4 - Strict Auth Requirement)
+ * Communicates strictly with Express/MongoDB backend using JWT authentication.
  */
 
 const API = {
@@ -76,6 +75,10 @@ const API = {
    * Fetch sessions for authenticated user
    */
   async getSessions(params = {}) {
+    if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) {
+      return [];
+    }
+
     const query = new URLSearchParams();
     if (params.filter && params.filter !== 'all') query.append('filter', params.filter);
     if (params.date) query.append('date', params.date);
@@ -92,7 +95,7 @@ const API = {
 
       if (res.status === 401) {
         if (typeof Auth !== 'undefined') Auth.logout();
-        throw new Error('Unauthorized');
+        return [];
       }
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -109,15 +112,11 @@ const API = {
         }
         return json.data;
       }
-      throw new Error('Malformed API response');
+      return [];
     } catch (err) {
-      console.warn('[API] Could not fetch sessions from backend, falling back to local storage:', err.message);
+      console.warn('[API] Could not fetch sessions from backend:', err.message);
       this._notifyStatus(false);
-      let localSessions = Storage.getSessions();
-      if (params.filter && typeof Analytics !== 'undefined') {
-        localSessions = Analytics.filterSessions(localSessions, params.filter, params.date);
-      }
-      return localSessions;
+      return [];
     }
   },
 
@@ -125,6 +124,8 @@ const API = {
    * GET /api/sessions/:id
    */
   async getSessionById(id) {
+    if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) return null;
+
     try {
       const res = await fetch(`${this.baseUrl}/sessions/${id}`, {
         headers: this.getHeaders()
@@ -133,18 +134,22 @@ const API = {
       const json = await res.json();
       return json.data;
     } catch (err) {
-      return Storage.getSessions().find(s => s.id === id) || null;
+      return null;
     }
   },
 
   /**
    * POST /api/sessions
-   * Save a new study session
+   * Save a new study session (Requires mandatory authentication)
    */
   async createSession(sessionData) {
-    const user = (typeof Auth !== 'undefined') ? Auth.getUser() : null;
+    if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) {
+      throw new Error('Please sign in or create an account to record your study session.');
+    }
+
+    const user = Auth.getUser();
     const payload = {
-      userId: (user && user.id) ? user.id : 'student-default',
+      userId: user ? user.id : null,
       subject: sessionData.subject || 'General Study',
       startTime: sessionData.startTime,
       endTime: sessionData.endTime,
@@ -152,23 +157,17 @@ const API = {
       device: sessionData.device || 'Laptop'
     };
 
-    const localSession = {
-      id: sessionData.id || 'session_' + Date.now(),
-      subject: payload.subject,
-      startTime: payload.startTime,
-      endTime: payload.endTime,
-      durationSeconds: payload.duration,
-      date: sessionData.date || new Date(payload.startTime).toISOString().split('T')[0],
-      device: payload.device
-    };
-    Storage.saveSession(localSession);
-
     try {
       const res = await fetch(`${this.baseUrl}/sessions`, {
         method: 'POST',
         headers: this.getHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload)
       });
+
+      if (res.status === 401) {
+        Auth.logout();
+        throw new Error('Session expired. Please sign in again.');
+      }
 
       if (!res.ok) {
         const errorJson = await res.json().catch(() => ({}));
@@ -179,9 +178,9 @@ const API = {
       this._notifyStatus(true);
       return json.data;
     } catch (err) {
-      console.warn('[API] POST /api/sessions failed, saved in local storage fallback:', err.message);
+      console.warn('[API] POST /api/sessions failed:', err.message);
       this._notifyStatus(false);
-      return localSession;
+      throw err;
     }
   },
 
@@ -189,6 +188,8 @@ const API = {
    * PUT /api/sessions/:id
    */
   async updateSession(id, updateData) {
+    if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) return null;
+
     try {
       const res = await fetch(`${this.baseUrl}/sessions/${id}`, {
         method: 'PUT',
@@ -208,7 +209,8 @@ const API = {
    * DELETE /api/sessions/:id
    */
   async deleteSession(id) {
-    Storage.deleteSession(id);
+    if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) return false;
+
     try {
       const res = await fetch(`${this.baseUrl}/sessions/${id}`, {
         method: 'DELETE',
@@ -221,14 +223,15 @@ const API = {
     } catch (err) {
       this._notifyStatus(false);
     }
-    return true;
+    return false;
   },
 
   /**
    * DELETE /api/sessions
    */
   async clearAllSessions() {
-    Storage.clearAllSessions();
+    if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) return false;
+
     try {
       const res = await fetch(`${this.baseUrl}/sessions`, {
         method: 'DELETE',
@@ -241,13 +244,17 @@ const API = {
     } catch (err) {
       this._notifyStatus(false);
     }
-    return true;
+    return false;
   },
 
   /**
    * GET /api/analytics/summary
    */
   async getAnalyticsSummary(filter = 'all', date = null) {
+    if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) {
+      return Analytics.calculateDetailedMetrics([], []);
+    }
+
     const query = new URLSearchParams({ filter });
     if (date) query.append('date', date);
 
@@ -261,12 +268,10 @@ const API = {
         this._notifyStatus(true);
         return json.data;
       }
-      throw new Error('Invalid analytics response');
+      return Analytics.calculateDetailedMetrics([], []);
     } catch (err) {
       this._notifyStatus(false);
-      const allSessions = Storage.getSessions();
-      const filtered = Analytics.filterSessions(allSessions, filter, date);
-      return Analytics.calculateDetailedMetrics(filtered, allSessions);
+      return Analytics.calculateDetailedMetrics([], []);
     }
   },
 
@@ -274,6 +279,8 @@ const API = {
    * GET /api/analytics/charts
    */
   async getChartData() {
+    if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) return null;
+
     try {
       const res = await fetch(`${this.baseUrl}/analytics/charts`, {
         headers: this.getHeaders()
@@ -284,7 +291,7 @@ const API = {
         this._notifyStatus(true);
         return json.data;
       }
-      throw new Error('Invalid charts response');
+      return null;
     } catch (err) {
       this._notifyStatus(false);
       return null;

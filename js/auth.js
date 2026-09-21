@@ -1,6 +1,7 @@
 /**
  * StudyTrace - Authentication Client Module (Build 4)
- * Handles token storage, user session management, registration, and login requests.
+ * Handles token storage, user session management, registration, login requests,
+ * and automatic migration of Guest Mode local sessions to Cloud MongoDB.
  */
 
 const Auth = {
@@ -76,6 +77,9 @@ const Auth = {
 
       if (data.token && data.user) {
         this.saveAuth(data.token, data.user);
+        if (window.API && typeof API.syncGuestSessionsToCloud === 'function') {
+          await API.syncGuestSessionsToCloud();
+        }
       }
       return data;
     } catch (err) {
@@ -101,6 +105,9 @@ const Auth = {
 
       if (data.token && data.user) {
         this.saveAuth(data.token, data.user);
+        if (window.API && typeof API.syncGuestSessionsToCloud === 'function') {
+          await API.syncGuestSessionsToCloud();
+        }
       }
       return data;
     } catch (err) {

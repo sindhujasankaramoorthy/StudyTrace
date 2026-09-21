@@ -104,15 +104,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 3. User Authentication State & Header UI
   function updateUserUI() {
-    if (typeof Auth !== 'undefined' && Auth.isLoggedIn()) {
+    const isLoggedIn = (typeof Auth !== 'undefined' && Auth.isLoggedIn());
+    if (isLoggedIn) {
       const user = Auth.getUser();
       userDisplayName.textContent = `👤 ${user ? user.name : 'Student'}`;
       btnAuthAction.textContent = 'Logout';
       btnAuthAction.className = 'btn-user-action logout';
+      if (btnCloseAuthModal) btnCloseAuthModal.style.display = 'block';
+      hideAuthModal();
     } else {
-      userDisplayName.textContent = '👤 Guest';
+      userDisplayName.textContent = '👤 Not Signed In';
       btnAuthAction.textContent = 'Sign In';
       btnAuthAction.className = 'btn-user-action login';
+      if (btnCloseAuthModal) btnCloseAuthModal.style.display = 'none';
+      showAuthModal('login');
     }
   }
 
@@ -126,22 +131,28 @@ document.addEventListener('DOMContentLoaded', () => {
       authTabLogin.classList.remove('active');
       formRegister.style.display = 'block';
       formLogin.style.display = 'none';
-      document.getElementById('auth-modal-subtitle').textContent = 'Create your StudyTrace account for cross-device sync';
+      document.getElementById('auth-modal-subtitle').textContent = 'Create your free account to access StudyTrace';
     } else {
       authTabLogin.classList.add('active');
       authTabRegister.classList.remove('active');
       formLogin.style.display = 'block';
       formRegister.style.display = 'none';
-      document.getElementById('auth-modal-subtitle').textContent = 'Sign in to sync your study history across devices';
+      document.getElementById('auth-modal-subtitle').textContent = 'Sign in with your account to access StudyTrace';
     }
   }
 
   function hideAuthModal() {
-    authModal.style.display = 'none';
+    if (typeof Auth !== 'undefined' && Auth.isLoggedIn()) {
+      authModal.style.display = 'none';
+    }
   }
 
   if (btnCloseAuthModal) {
-    btnCloseAuthModal.addEventListener('click', hideAuthModal);
+    btnCloseAuthModal.addEventListener('click', () => {
+      if (typeof Auth !== 'undefined' && Auth.isLoggedIn()) {
+        hideAuthModal();
+      }
+    });
   }
 
   if (authTabLogin) {
@@ -571,6 +582,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 14. Event Listeners for Session Start & Stop
   btnStart.addEventListener('click', () => {
+    if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) {
+      showAuthModal('login');
+      return;
+    }
+
     const subject = subjectInput.value.trim() || 'General Study';
     const startTime = Date.now();
 
