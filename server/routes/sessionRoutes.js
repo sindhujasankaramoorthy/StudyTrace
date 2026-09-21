@@ -1,5 +1,5 @@
 /**
- * Session Routes
+ * Session Routes (Protected by JWT Auth)
  */
 const express = require('express');
 const router = express.Router();
@@ -14,6 +14,10 @@ const {
 } = require('../controllers/sessionController');
 
 const { validateSessionInput } = require('../middleware/validateSession');
+const { protect } = require('../middleware/authMiddleware');
+
+// Protect all session routes
+router.use(protect);
 
 router.route('/')
   .post(validateSessionInput, createSession)

@@ -1,5 +1,5 @@
 /**
- * Study Session Controller
+ * Study Session Controller (Authenticated & Scoped to req.user)
  * Handles CRUD operations for study sessions using SessionStore.
  */
 
@@ -7,17 +7,18 @@ const SessionStore = require('../services/sessionStore');
 
 /**
  * @route   POST /api/sessions
- * @desc    Create a new study session
+ * @desc    Create a new study session for logged-in user
  */
 const createSession = async (req, res, next) => {
   try {
-    const { userId, subject, startTime, endTime, duration, device } = req.body;
+    const { subject, startTime, endTime, duration, device } = req.body;
+    const userId = req.user ? req.user.id : 'student-default';
 
     // Calculate duration in seconds if not provided
     const sessionDuration = duration || Math.max(1, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000));
 
     const newSession = await SessionStore.create({
-      userId: userId || 'student-default',
+      userId,
       subject: subject || 'General Study',
       startTime: new Date(startTime),
       endTime: new Date(endTime),
@@ -37,11 +38,12 @@ const createSession = async (req, res, next) => {
 
 /**
  * @route   GET /api/sessions
- * @desc    Get all study sessions (supports query: filter, date, subject, device)
+ * @desc    Get all study sessions for logged-in user
  */
 const getSessions = async (req, res, next) => {
   try {
-    const { userId = 'student-default', filter, date, subject, device } = req.query;
+    const userId = req.user ? req.user.id : 'student-default';
+    const { filter, date, subject, device } = req.query;
     
     const formattedSessions = await SessionStore.find({
       userId,
@@ -63,13 +65,14 @@ const getSessions = async (req, res, next) => {
 
 /**
  * @route   GET /api/sessions/:id
- * @desc    Get a single study session by ID
+ * @desc    Get a single study session by ID (must belong to logged-in user)
  */
 const getSessionById = async (req, res, next) => {
   try {
+    const userId = req.user ? req.user.id : 'student-default';
     const session = await SessionStore.findById(req.params.id);
 
-    if (!session) {
+    if (!session || (session.userId && session.userId !== userId)) {
       return res.status(404).json({
         success: false,
         message: `No session found with id ${req.params.id}`
@@ -87,18 +90,21 @@ const getSessionById = async (req, res, next) => {
 
 /**
  * @route   PUT /api/sessions/:id
- * @desc    Update a study session
+ * @desc    Update a study session (must belong to logged-in user)
  */
 const updateSession = async (req, res, next) => {
   try {
-    const updated = await SessionStore.findByIdAndUpdate(req.params.id, req.body);
+    const userId = req.user ? req.user.id : 'student-default';
+    const existing = await SessionStore.findById(req.params.id);
 
-    if (!updated) {
+    if (!existing || (existing.userId && existing.userId !== userId)) {
       return res.status(404).json({
         success: false,
         message: `No session found with id ${req.params.id}`
       });
     }
+
+    const updated = await SessionStore.findByIdAndUpdate(req.params.id, req.body);
 
     res.status(200).json({
       success: true,
@@ -112,18 +118,21 @@ const updateSession = async (req, res, next) => {
 
 /**
  * @route   DELETE /api/sessions/:id
- * @desc    Delete a study session by ID
+ * @desc    Delete a study session by ID (must belong to logged-in user)
  */
 const deleteSession = async (req, res, next) => {
   try {
-    const deleted = await SessionStore.findByIdAndDelete(req.params.id);
+    const userId = req.user ? req.user.id : 'student-default';
+    const existing = await SessionStore.findById(req.params.id);
 
-    if (!deleted) {
+    if (!existing || (existing.userId && existing.userId !== userId)) {
       return res.status(404).json({
         success: false,
         message: `No session found with id ${req.params.id}`
       });
     }
+
+    const deleted = await SessionStore.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       success: true,
@@ -137,11 +146,11 @@ const deleteSession = async (req, res, next) => {
 
 /**
  * @route   DELETE /api/sessions
- * @desc    Clear all study sessions for a user
+ * @desc    Clear all study sessions for logged-in user
  */
 const clearAllSessions = async (req, res, next) => {
   try {
-    const userId = req.query.userId || 'student-default';
+    const userId = req.user ? req.user.id : 'student-default';
     const result = await SessionStore.deleteMany(userId);
 
     res.status(200).json({

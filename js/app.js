@@ -1,8 +1,8 @@
 /**
- * StudyTrace - Main Application Controller (Build 3)
+ * StudyTrace - Main Application Controller (Build 4)
  * Coordinates UI interactions, multi-view navigation, live timer lifecycle,
- * session filtering, advanced analytics, and data synchronization with
- * the Express/MongoDB REST API (with offline LocalStorage fallback).
+ * session filtering, advanced analytics, JWT authentication, and cross-device
+ * synchronization with MongoDB Cloud.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -39,13 +39,29 @@ document.addEventListener('DOMContentLoaded', () => {
   const headerDate = document.getElementById('header-date');
   const deviceBadge = document.getElementById('header-device-badge');
   const headerBackendStatus = document.getElementById('header-backend-status');
+  const userDisplayName = document.getElementById('user-display-name');
+  const btnAuthAction = document.getElementById('btn-auth-action');
+
+  // Auth Modal Elements (Build 4)
+  const authModal = document.getElementById('auth-modal');
+  const btnCloseAuthModal = document.getElementById('btn-close-auth-modal');
+  const authTabLogin = document.getElementById('auth-tab-login');
+  const authTabRegister = document.getElementById('auth-tab-register');
+  const authAlert = document.getElementById('auth-error-alert');
+  const formLogin = document.getElementById('form-login');
+  const formRegister = document.getElementById('form-register');
+  const loginEmail = document.getElementById('login-email');
+  const loginPassword = document.getElementById('login-password');
+  const registerName = document.getElementById('register-name');
+  const registerEmail = document.getElementById('register-email');
+  const registerPassword = document.getElementById('register-password');
 
   // Recent Sessions Elements (Dashboard)
   const recentSessionsContainer = document.getElementById('recent-sessions-container');
   const btnClearAll = document.getElementById('btn-clear-sessions');
   const btnAddSample = document.getElementById('btn-add-sample');
 
-  // DOM Elements - History & Analytics View (Build 2)
+  // DOM Elements - History & Analytics View
   const filterButtons = document.querySelectorAll('.filter-btn');
   const filterCustomDateInput = document.getElementById('filter-custom-date');
   const btnClearDate = document.getElementById('btn-clear-date');
@@ -86,7 +102,136 @@ document.addEventListener('DOMContentLoaded', () => {
     headerDate.textContent = new Date().toLocaleDateString(undefined, todayOptions);
   }
 
-  // 3. Backend REST Connection Status Indicator
+  // 3. User Authentication State & Header UI
+  function updateUserUI() {
+    if (typeof Auth !== 'undefined' && Auth.isLoggedIn()) {
+      const user = Auth.getUser();
+      userDisplayName.textContent = `👤 ${user ? user.name : 'Student'}`;
+      btnAuthAction.textContent = 'Logout';
+      btnAuthAction.className = 'btn-user-action logout';
+    } else {
+      userDisplayName.textContent = '👤 Guest';
+      btnAuthAction.textContent = 'Sign In';
+      btnAuthAction.className = 'btn-user-action login';
+    }
+  }
+
+  function showAuthModal(tab = 'login') {
+    authModal.style.display = 'flex';
+    authAlert.style.display = 'none';
+    authAlert.textContent = '';
+    
+    if (tab === 'register') {
+      authTabRegister.classList.add('active');
+      authTabLogin.classList.remove('active');
+      formRegister.style.display = 'block';
+      formLogin.style.display = 'none';
+      document.getElementById('auth-modal-subtitle').textContent = 'Create your StudyTrace account for cross-device sync';
+    } else {
+      authTabLogin.classList.add('active');
+      authTabRegister.classList.remove('active');
+      formLogin.style.display = 'block';
+      formRegister.style.display = 'none';
+      document.getElementById('auth-modal-subtitle').textContent = 'Sign in to sync your study history across devices';
+    }
+  }
+
+  function hideAuthModal() {
+    authModal.style.display = 'none';
+  }
+
+  if (btnCloseAuthModal) {
+    btnCloseAuthModal.addEventListener('click', hideAuthModal);
+  }
+
+  if (authTabLogin) {
+    authTabLogin.addEventListener('click', () => showAuthModal('login'));
+  }
+  if (authTabRegister) {
+    authTabRegister.addEventListener('click', () => showAuthModal('register'));
+  }
+
+  if (btnAuthAction) {
+    btnAuthAction.addEventListener('click', () => {
+      if (typeof Auth !== 'undefined' && Auth.isLoggedIn()) {
+        if (confirm('Are you sure you want to log out of StudyTrace?')) {
+          Auth.logout();
+          updateUserUI();
+          refreshDashboard();
+          if (viewHistory.style.display !== 'none') {
+            refreshHistoryAndAnalytics();
+          }
+        }
+      } else {
+        showAuthModal('login');
+      }
+    });
+  }
+
+  // Sign In Form Submit
+  if (formLogin) {
+    formLogin.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      authAlert.style.display = 'none';
+      const email = loginEmail.value.trim();
+      const password = loginPassword.value;
+
+      try {
+        const btn = document.getElementById('btn-submit-login');
+        btn.disabled = true;
+        btn.textContent = 'Signing in...';
+
+        await Auth.login(email, password);
+        hideAuthModal();
+        updateUserUI();
+        await refreshDashboard();
+        if (viewHistory.style.display !== 'none') {
+          await refreshHistoryAndAnalytics();
+        }
+      } catch (err) {
+        authAlert.textContent = err.message || 'Login failed';
+        authAlert.style.display = 'block';
+      } finally {
+        const btn = document.getElementById('btn-submit-login');
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    });
+  }
+
+  // Register Form Submit
+  if (formRegister) {
+    formRegister.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      authAlert.style.display = 'none';
+      const name = registerName.value.trim();
+      const email = registerEmail.value.trim();
+      const password = registerPassword.value;
+
+      try {
+        const btn = document.getElementById('btn-submit-register');
+        btn.disabled = true;
+        btn.textContent = 'Creating account...';
+
+        await Auth.register(name, email, password);
+        hideAuthModal();
+        updateUserUI();
+        await refreshDashboard();
+        if (viewHistory.style.display !== 'none') {
+          await refreshHistoryAndAnalytics();
+        }
+      } catch (err) {
+        authAlert.textContent = err.message || 'Registration failed';
+        authAlert.style.display = 'block';
+      } finally {
+        const btn = document.getElementById('btn-submit-register');
+        btn.disabled = false;
+        btn.textContent = 'Create Free Account';
+      }
+    });
+  }
+
+  // 4. Backend REST Connection Status Indicator
   function updateBackendBadge(isOnline, details = null) {
     if (!headerBackendStatus) return;
     if (isOnline) {
@@ -110,7 +255,10 @@ document.addEventListener('DOMContentLoaded', () => {
     updateBackendBadge(false);
   }
 
-  // 4. View Switcher Logic
+  // Initial user state update
+  updateUserUI();
+
+  // 5. View Switcher Logic
   async function switchView(targetView) {
     if (targetView === 'dashboard') {
       tabDashboard.classList.add('active');
@@ -130,13 +278,13 @@ document.addEventListener('DOMContentLoaded', () => {
   tabDashboard.addEventListener('click', () => switchView('dashboard'));
   tabHistory.addEventListener('click', () => switchView('history'));
 
-  // 5. Initialize Live Timer instance
+  // 6. Initialize Live Timer instance
   const timer = new StudyTimer((formattedTime, elapsedSeconds) => {
     timerDisplay.textContent = formattedTime;
     document.title = `(${formattedTime}) StudyTrace`;
   });
 
-  // 6. Update UI State for Running/Idle Session
+  // 7. Update UI State for Running/Idle Session
   function setSessionUIState(isRunning, subject = '') {
     if (isRunning) {
       sessionCard.classList.add('session-active');
@@ -157,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 7. Render Dashboard View
+  // 8. Render Dashboard View
   async function refreshDashboard() {
     const sessions = window.API ? await API.getSessions() : Storage.getSessions();
     const todaySeconds = Analytics.getTodayTotalSeconds(sessions);
@@ -196,7 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderRecentSessionsDashboard(sessions);
   }
 
-  // 8. Render Dashboard Recent Sessions List
+  // 9. Render Dashboard Recent Sessions List
   function renderRecentSessionsDashboard(sessions) {
     if (!sessions || sessions.length === 0) {
       recentSessionsContainer.innerHTML = `
@@ -259,7 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 9. Render History & Advanced Analytics View (Build 2 + Build 3 REST Sync)
+  // 10. Render History & Advanced Analytics View
   async function refreshHistoryAndAnalytics() {
     const allSessions = window.API ? await API.getSessions() : Storage.getSessions();
     const filteredSessions = window.API
@@ -304,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderHistoryTable(filteredSessions);
   }
 
-  // 10. Render Detailed History Table
+  // 11. Render Detailed History Table
   function renderHistoryTable(sessions) {
     if (!sessions || sessions.length === 0) {
       historyTableBody.innerHTML = `
@@ -366,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 11. Filter Bar Events
+  // 12. Filter Bar Events
   filterButtons.forEach(btn => {
     btn.addEventListener('click', async () => {
       filterButtons.forEach(b => b.classList.remove('active'));
@@ -401,7 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await refreshHistoryAndAnalytics();
   });
 
-  // 12. Clear All History Action (Build 2 & 3)
+  // 13. Clear All History Action
   btnClearAllHistory.addEventListener('click', async () => {
     if (confirm('Are you sure you want to permanently delete all study history? This action cannot be undone.')) {
       if (window.API) {
@@ -421,7 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return div.innerHTML;
   }
 
-  // 13. Event Listeners for Session Start & Stop
+  // 14. Event Listeners for Session Start & Stop
   btnStart.addEventListener('click', () => {
     const subject = subjectInput.value.trim() || 'General Study';
     const startTime = Date.now();
@@ -444,9 +592,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create session record
     const todayStr = Analytics.getLocalDateString(new Date(summary.startTime));
+    const user = (typeof Auth !== 'undefined') ? Auth.getUser() : null;
+
     const newSession = {
       id: 'session_' + Date.now(),
-      userId: 'student-default',
+      userId: user ? user.id : 'student-default',
       subject: summary.subject,
       startTime: summary.startTime,
       endTime: summary.endTime,
@@ -524,7 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 14. Check and Resume Active Session on page reload
+  // 15. Check and Resume Active Session on page reload
   const activeSession = Storage.getActiveSession();
   if (activeSession && activeSession.startTime) {
     subjectInput.value = activeSession.subject || 'General Study';

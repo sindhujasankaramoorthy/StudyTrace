@@ -64,6 +64,10 @@
         <span class="header-badge" id="header-backend-status">⚡ Connecting...</span>
         <span class="header-badge" id="header-date">Today</span>
         <span class="header-badge" id="header-device-badge">💻 Laptop</span>
+        <div id="header-user-widget" class="header-user-widget">
+          <span class="user-pill" id="user-display-name">👤 Guest</span>
+          <button type="button" class="btn-user-action" id="btn-auth-action">Login</button>
+        </div>
       </div>
     </header>
 
@@ -428,9 +432,65 @@
 
     <!-- Footer -->
     <footer class="app-footer">
-      <p>StudyTrace — Cross-Device Study Time Tracking System &bull; Build 3 Production Backend & REST APIs</p>
+      <p>StudyTrace — Cross-Device Study Time Tracking System &bull; Build 4 User Auth & Cross-Device Sync</p>
     </footer>
 
+  </div>
+
+  <!-- Auth Modal Overlay (Build 4) -->
+  <div id="auth-modal" class="auth-modal-overlay" style="display: none;">
+    <div class="auth-modal-card">
+      <button type="button" class="btn-close-modal" id="btn-close-auth-modal" aria-label="Close modal">&times;</button>
+
+      <div class="auth-brand-head">
+        <div class="auth-brand-icon" aria-hidden="true">⏱️</div>
+        <h2 class="auth-title">StudyTrace</h2>
+        <p id="auth-modal-subtitle">Sign in to sync your study history across devices</p>
+      </div>
+
+      <!-- Auth Tabs: Login vs Register -->
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab-btn active" id="auth-tab-login">Sign In</button>
+        <button type="button" class="auth-tab-btn" id="auth-tab-register">Create Account</button>
+      </div>
+
+      <!-- Error Alert Box -->
+      <div id="auth-error-alert" class="auth-alert" style="display: none;"></div>
+
+      <!-- Sign In Form -->
+      <form id="form-login" class="auth-form">
+        <div class="form-group">
+          <label for="login-email">Email Address</label>
+          <input type="email" id="login-email" class="auth-input" placeholder="student@example.com" required>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" class="auth-input" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn-auth-submit" id="btn-submit-login">Sign In</button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="form-register" class="auth-form" style="display: none;">
+        <div class="form-group">
+          <label for="register-name">Full Name</label>
+          <input type="text" id="register-name" class="auth-input" placeholder="Sindhuja" required>
+        </div>
+        <div class="form-group">
+          <label for="register-email">Email Address</label>
+          <input type="email" id="register-email" class="auth-input" placeholder="student@example.com" required>
+        </div>
+        <div class="form-group">
+          <label for="register-password">Password (min 6 chars)</label>
+          <input type="password" id="register-password" class="auth-input" placeholder="••••••••" required minlength="6">
+        </div>
+        <button type="submit" class="btn-auth-submit" id="btn-submit-register">Create Free Account</button>
+      </form>
+
+      <div class="auth-footer-note">
+        <span>🔒 Secured with JWT & bcrypt password hashing</span>
+      </div>
+    </div>
   </div>
 
   <!-- External Libraries (Chart.js for analytics) -->
@@ -438,6 +498,7 @@
 
   <!-- Modular Scripts -->
   <script src="js/storage.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/api.js"></script>
   <script src="js/timer.js"></script>
   <script src="js/analytics.js"></script>

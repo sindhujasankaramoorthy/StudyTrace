@@ -1,7 +1,7 @@
 /**
  * StudyTrace Server Entry Point
  * Express application configured with MongoDB connection, API routes,
- * centralized error handling, and static client serving.
+ * authentication, centralized error handling, and static client serving.
  */
 
 require('dotenv').config();
@@ -10,6 +10,7 @@ const path = require('path');
 const cors = require('cors');
 
 const { connectDB, isDBConnected } = require('./server/config/db');
+const authRoutes = require('./server/routes/authRoutes');
 const sessionRoutes = require('./server/routes/sessionRoutes');
 const analyticsRoutes = require('./server/routes/analyticsRoutes');
 const { notFoundHandler, errorHandler } = require('./server/middleware/errorHandler');
@@ -39,6 +40,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Mount API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/analytics', analyticsRoutes);
 

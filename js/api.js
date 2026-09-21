@@ -1,7 +1,7 @@
 /**
- * StudyTrace - API Client & Data Sync Service (Build 3)
- * Provides seamless communication with the Express/MongoDB REST backend,
- * with intelligent automatic fallback to LocalStorage when running offline.
+ * StudyTrace - API Client & Data Sync Service (Build 4)
+ * Handles REST communication with authentication tokens,
+ * automatically syncing with MongoDB Cloud when logged in.
  */
 
 const API = {
@@ -12,6 +12,17 @@ const API = {
 
   isServerOnline: false,
   statusListeners: [],
+
+  /**
+   * Helper to construct request headers with JWT token
+   */
+  getHeaders(extraHeaders = {}) {
+    const headers = { ...extraHeaders };
+    if (typeof Auth !== 'undefined' && Auth.getToken()) {
+      headers['Authorization'] = `Bearer ${Auth.getToken()}`;
+    }
+    return headers;
+  },
 
   /**
    * Register listener for connection status changes
@@ -34,7 +45,6 @@ const API = {
 
   /**
    * Ping backend health endpoint
-   * @returns {Promise<boolean>}
    */
   async checkHealth() {
     try {
@@ -63,7 +73,7 @@ const API = {
 
   /**
    * GET /api/sessions
-   * Fetch sessions with optional query parameters (filter, date, subject, device)
+   * Fetch sessions for authenticated user
    */
   async getSessions(params = {}) {
     const query = new URLSearchParams();
@@ -75,13 +85,21 @@ const API = {
     const url = `${this.baseUrl}/sessions${query.toString() ? '?' + query.toString() : ''}`;
 
     try {
-      const res = await fetch(url, { method: 'GET' });
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: this.getHeaders()
+      });
+
+      if (res.status === 401) {
+        if (typeof Auth !== 'undefined') Auth.logout();
+        throw new Error('Unauthorized');
+      }
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
       if (json && json.success && Array.isArray(json.data)) {
         this._notifyStatus(true);
-        // If query is unfiltered, mirror to LocalStorage cache
         if (!params.filter || params.filter === 'all') {
           try {
             localStorage.setItem('studytrace_sessions', JSON.stringify(json.data));
@@ -95,7 +113,6 @@ const API = {
     } catch (err) {
       console.warn('[API] Could not fetch sessions from backend, falling back to local storage:', err.message);
       this._notifyStatus(false);
-      // Seamless LocalStorage Fallback
       let localSessions = Storage.getSessions();
       if (params.filter && typeof Analytics !== 'undefined') {
         localSessions = Analytics.filterSessions(localSessions, params.filter, params.date);
@@ -106,27 +123,28 @@ const API = {
 
   /**
    * GET /api/sessions/:id
-   * Fetch single session by ID
    */
   async getSessionById(id) {
     try {
-      const res = await fetch(`${this.baseUrl}/sessions/${id}`);
+      const res = await fetch(`${this.baseUrl}/sessions/${id}`, {
+        headers: this.getHeaders()
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return json.data;
     } catch (err) {
-      console.warn(`[API] getSessionById fallback for ${id}`);
       return Storage.getSessions().find(s => s.id === id) || null;
     }
   },
 
   /**
    * POST /api/sessions
-   * Save a newly completed session
+   * Save a new study session
    */
   async createSession(sessionData) {
+    const user = (typeof Auth !== 'undefined') ? Auth.getUser() : null;
     const payload = {
-      userId: sessionData.userId || 'student-default',
+      userId: (user && user.id) ? user.id : 'student-default',
       subject: sessionData.subject || 'General Study',
       startTime: sessionData.startTime,
       endTime: sessionData.endTime,
@@ -134,7 +152,6 @@ const API = {
       device: sessionData.device || 'Laptop'
     };
 
-    // Always mirror to local storage immediately so no data is ever lost
     const localSession = {
       id: sessionData.id || 'session_' + Date.now(),
       subject: payload.subject,
@@ -149,7 +166,7 @@ const API = {
     try {
       const res = await fetch(`${this.baseUrl}/sessions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload)
       });
 
@@ -170,13 +187,12 @@ const API = {
 
   /**
    * PUT /api/sessions/:id
-   * Update an existing session
    */
   async updateSession(id, updateData) {
     try {
       const res = await fetch(`${this.baseUrl}/sessions/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(updateData)
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -184,29 +200,25 @@ const API = {
       this._notifyStatus(true);
       return json.data;
     } catch (err) {
-      console.warn(`[API] PUT /api/sessions/${id} failed:`, err.message);
       return null;
     }
   },
 
   /**
    * DELETE /api/sessions/:id
-   * Remove a single session
    */
   async deleteSession(id) {
-    // Mirror locally
     Storage.deleteSession(id);
-
     try {
       const res = await fetch(`${this.baseUrl}/sessions/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: this.getHeaders()
       });
       if (res.ok) {
         this._notifyStatus(true);
         return true;
       }
     } catch (err) {
-      console.warn(`[API] DELETE /api/sessions/${id} failed on backend, removed locally:`, err.message);
       this._notifyStatus(false);
     }
     return true;
@@ -214,21 +226,19 @@ const API = {
 
   /**
    * DELETE /api/sessions
-   * Clear all sessions
    */
   async clearAllSessions() {
     Storage.clearAllSessions();
-
     try {
       const res = await fetch(`${this.baseUrl}/sessions`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: this.getHeaders()
       });
       if (res.ok) {
         this._notifyStatus(true);
         return true;
       }
     } catch (err) {
-      console.warn('[API] DELETE /api/sessions failed on backend, cleared locally:', err.message);
       this._notifyStatus(false);
     }
     return true;
@@ -242,7 +252,9 @@ const API = {
     if (date) query.append('date', date);
 
     try {
-      const res = await fetch(`${this.baseUrl}/analytics/summary?${query.toString()}`);
+      const res = await fetch(`${this.baseUrl}/analytics/summary?${query.toString()}`, {
+        headers: this.getHeaders()
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json && json.success) {
@@ -251,7 +263,6 @@ const API = {
       }
       throw new Error('Invalid analytics response');
     } catch (err) {
-      // Offline fallback: compute on client
       this._notifyStatus(false);
       const allSessions = Storage.getSessions();
       const filtered = Analytics.filterSessions(allSessions, filter, date);
@@ -264,7 +275,9 @@ const API = {
    */
   async getChartData() {
     try {
-      const res = await fetch(`${this.baseUrl}/analytics/charts`);
+      const res = await fetch(`${this.baseUrl}/analytics/charts`, {
+        headers: this.getHeaders()
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json && json.success) {

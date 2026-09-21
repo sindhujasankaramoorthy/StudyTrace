@@ -14,53 +14,59 @@ The recorded sessions are synchronized through a cloud-based backend, allowing u
 
 ---
 
-## Build 3: Production Backend & Full-Stack Architecture
+## Build 4: Secure User Authentication & Cross-Device Synchronization
 
-Build 3 introduces a robust, production-style RESTful API built with **Node.js**, **Express.js**, **MongoDB**, and **Mongoose**, featuring centralized error handling, input validation, and intelligent hybrid synchronization with offline LocalStorage fallback.
+Build 4 introduces full user authentication (Registration, Login, Logout, JWT Tokens, bcrypt Password Hashing) and strict session ownership scoping so every student's study data, streak counts, and analytics are private, secure, and automatically synchronized across devices via MongoDB Cloud.
 
 ### Tech Stack
-- **Frontend**: HTML5, CSS3 (Modern Glassmorphism & Cyber Wave Visuals), Vanilla JavaScript (ES6+), Chart.js
+- **Frontend**: HTML5, CSS3 (Glassmorphic Auth Modal & Cyber Visuals), Vanilla JavaScript (ES6+), Chart.js
 - **Backend**: Node.js, Express.js
-- **Database**: MongoDB via Mongoose ODM
-- **Environment Management**: `dotenv` with `.env` configuration
-- **Cross-Origin Handling**: `cors` middleware
+- **Authentication**: JSON Web Tokens (`jsonwebtoken`) & Password Hashing (`bcryptjs`)
+- **Database**: MongoDB Atlas via Mongoose ODM
+- **Environment Management**: `dotenv` with `.env` configuration (`JWT_SECRET`, `MONGODB_URI`)
 
 ---
 
 ### Project Structure
 ```text
 StudyTrace/
-├── .env                  # Private environment variables (PORT, MONGODB_URI)
+├── .env                  # Private environment variables (PORT, MONGODB_URI, JWT_SECRET)
 ├── .env.example          # Environment template
 ├── .gitignore            # Git exclusion rules (node_modules, .env)
 ├── package.json          # Node project manifest & dependencies
 ├── server.js             # Express application entry point & static server
 ├── server/
 │   ├── config/
-│   │   └── db.js         # Mongoose connection manager with quick timeout
+│   │   └── db.js         # Mongoose connection manager with quick timeout & fallback
 │   ├── controllers/
-│   │   ├── sessionController.js   # Session CRUD & clear logic
-│   │   └── analyticsController.js # Aggregated KPI & chart metrics
+│   │   ├── authController.js      # User registration, login, & me endpoints
+│   │   ├── sessionController.js   # Scoped user session CRUD logic
+│   │   └── analyticsController.js # Scoped aggregated KPI & chart metrics
 │   ├── middleware/
+│   │   ├── authMiddleware.js      # JWT token verification protector
 │   │   ├── validateSession.js     # Input validation middleware
-│   │   └── errorHandler.js        # Centralized 400, 404, 500 error handlers
+│   │   └── errorHandler.js        # Centralized 400, 401, 404, 500 error handlers
 │   ├── models/
-│   │   └── Session.js    # Mongoose schema (userId, startTime, endTime, duration, device)
+│   │   ├── User.js       # User schema (name, email, passwordHash, createdAt)
+│   │   └── Session.js    # Session schema (userId, startTime, endTime, duration, device)
 │   ├── routes/
-│   │   ├── sessionRoutes.js       # /api/sessions routing
-│   │   └── analyticsRoutes.js     # /api/analytics routing
+│   │   ├── authRoutes.js          # /api/auth routing
+│   │   ├── sessionRoutes.js       # /api/sessions routing (protected)
+│   │   └── analyticsRoutes.js     # /api/analytics routing (protected)
 │   └── services/
-│       └── analyticsService.js    # Business logic for KPIs, streaks & charts
+│       ├── analyticsService.js    # Business logic for KPIs, streaks & charts
+│       └── sessionStore.js        # Dual-mode data persistence adapter
 ├── css/
-│   └── style.css         # Complete responsive styles & cyber theme
+│   └── style.css         # Complete responsive styles & auth modal theme
 ├── js/
-│   ├── api.js            # Frontend REST client with auto LocalStorage fallback
+│   ├── auth.js           # Client-side authentication service & token manager
+│   ├── api.js            # REST client with JWT Bearer header injection
 │   ├── storage.js        # LocalStorage persistence manager & cache
 │   ├── timer.js          # Live timer engine with drift-free tracking
 │   ├── analytics.js      # Client-side analytics & Chart.js renderers
 │   ├── cyber-bg.js       # Interactive dynamic canvas mesh background
 │   └── app.js            # Main application controller & view switcher
-├── index.html            # Main single-page web app
+├── index.html            # Main single-page web app with Auth Modal
 └── README.md             # Project documentation
 ```
 
@@ -68,22 +74,29 @@ StudyTrace/
 
 ### REST API Reference
 
-#### Session Endpoints
-| Method | Endpoint | Description | Status Codes |
-|---|---|---|---|
-| `POST` | `/api/sessions` | Create a new completed study session | `201 Created`, `400 Bad Request` |
-| `GET` | `/api/sessions` | Retrieve study sessions (supports `?filter=`, `?date=`) | `200 OK`, `500 Error` |
-| `GET` | `/api/sessions/:id` | Retrieve a specific session by ID | `200 OK`, `404 Not Found` |
-| `PUT` | `/api/sessions/:id` | Update session details | `200 OK`, `400 Bad Request`, `404 Not Found` |
-| `DELETE` | `/api/sessions/:id` | Delete a single session | `200 OK`, `404 Not Found` |
-| `DELETE` | `/api/sessions` | Clear all sessions for a user | `200 OK` |
+#### Authentication Endpoints
+| Method | Endpoint | Protection | Description | Status Codes |
+|---|---|---|---|---|
+| `POST` | `/api/auth/register` | Public | Register new user account with hashed password | `201 Created`, `400 Bad Request` |
+| `POST` | `/api/auth/login` | Public | Authenticate user & return JWT token | `200 OK`, `401 Unauthorized` |
+| `GET` | `/api/auth/me` | Protected | Fetch current logged-in user profile | `200 OK`, `401 Unauthorized` |
+
+#### Session Endpoints (Scoped to Authenticated User)
+| Method | Endpoint | Protection | Description | Status Codes |
+|---|---|---|---|---|
+| `POST` | `/api/sessions` | Protected | Create a new study session for logged-in user | `201 Created`, `400 Bad Request` |
+| `GET` | `/api/sessions` | Protected | Retrieve study sessions for logged-in user | `200 OK`, `401 Unauthorized` |
+| `GET` | `/api/sessions/:id` | Protected | Retrieve a specific session by ID | `200 OK`, `404 Not Found` |
+| `PUT` | `/api/sessions/:id` | Protected | Update owned session details | `200 OK`, `404 Not Found` |
+| `DELETE` | `/api/sessions/:id` | Protected | Delete a single owned session | `200 OK`, `404 Not Found` |
+| `DELETE` | `/api/sessions` | Protected | Clear all sessions for logged-in user | `200 OK` |
 
 #### Analytics & Health Endpoints
-| Method | Endpoint | Description | Status Codes |
-|---|---|---|---|
-| `GET` | `/api/health` | Server uptime and MongoDB connection state | `200 OK` |
-| `GET` | `/api/analytics/summary` | Aggregated KPIs (Totals, Averages, Top Day, Streaks) | `200 OK` |
-| `GET` | `/api/analytics/charts` | Precomputed weekly, monthly, and subject distributions | `200 OK` |
+| Method | Endpoint | Protection | Description | Status Codes |
+|---|---|---|---|---|
+| `GET` | `/api/health` | Public | Server uptime and MongoDB connection state | `200 OK` |
+| `GET` | `/api/analytics/summary` | Protected | Scoped aggregated KPIs (Totals, Averages, Streaks) | `200 OK` |
+| `GET` | `/api/analytics/charts` | Protected | Scoped precomputed weekly, monthly, doughnut charts | `200 OK` |
 
 ---
 
@@ -94,21 +107,11 @@ StudyTrace/
    npm install
    ```
 
-2. **Start MongoDB** (if running locally):
-   ```bash
-   mongod
-   ```
-   *(Note: If MongoDB is not running, the application will still launch smoothly and operate in resilient `💾 Local Mode` via LocalStorage fallback without breaking).*
-
-3. **Start the Production Server**:
+2. **Start the Production Server**:
    ```bash
    npm start
    ```
-   Or for live reloading during development:
-   ```bash
-   npm run dev
-   ```
 
-4. **Access the App**:
+3. **Access the App**:
    Open [http://localhost:5000](http://localhost:5000) in your browser.
-   The header indicator will display `🟢 Cloud Synced (MongoDB)` when connected to your backend.
+   Sign up or sign in to synchronize your study session history across devices in real time via MongoDB Cloud!
