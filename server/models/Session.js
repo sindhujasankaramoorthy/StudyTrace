@@ -1,5 +1,5 @@
 /**
- * Study Session Mongoose Model
+ * Study Session Mongoose Model (Build 5)
  */
 const mongoose = require('mongoose');
 
@@ -9,6 +9,11 @@ const sessionSchema = new mongoose.Schema(
       type: String,
       default: 'student-default',
       trim: true,
+      index: true
+    },
+    clientSessionId: {
+      type: String,
+      sparse: true,
       index: true
     },
     subject: {
@@ -37,6 +42,11 @@ const sessionSchema = new mongoose.Schema(
         message: '{VALUE} is not a supported device type'
       },
       default: 'Laptop'
+    },
+    deviceCategory: {
+      type: String,
+      enum: ['Phone Time', 'Laptop Active Time', 'General Focus'],
+      default: 'Laptop Active Time'
     },
     createdAt: {
       type: Date,

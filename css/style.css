@@ -184,9 +184,43 @@ body {
    ========================================================================== */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
-  margin-bottom: 28px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.metrics-grid-5 {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.secondary-metrics-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .secondary-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.status-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tracker-badge {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: var(--primary);
+  font-weight: 500;
 }
 
 .metric-card,

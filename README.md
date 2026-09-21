@@ -14,59 +14,72 @@ The recorded sessions are synchronized through a cloud-based backend, allowing u
 
 ---
 
-## Build 4: Secure User Authentication & Cross-Device Synchronization
+## Build 5: Automatic Cross-Device Tracking, Deduplication & Production Deployment
 
-Build 4 introduces full user authentication (Registration, Login, Logout, JWT Tokens, bcrypt Password Hashing) and strict session ownership scoping so every student's study data, streak counts, and analytics are private, secure, and automatically synchronized across devices via MongoDB Cloud.
+Build 5 expands StudyTrace into a complete multi-device ecosystem featuring Android Focus Mode integration, lightweight Laptop activity tracking with auto-pause, idempotent cross-device sync deduplication (`clientSessionId`), configurable CORS, and expanded dashboard KPI metrics.
 
-### Tech Stack
-- **Frontend**: HTML5, CSS3 (Glassmorphic Auth Modal & Cyber Visuals), Vanilla JavaScript (ES6+), Chart.js
-- **Backend**: Node.js, Express.js
-- **Authentication**: JSON Web Tokens (`jsonwebtoken`) & Password Hashing (`bcryptjs`)
-- **Database**: MongoDB Atlas via Mongoose ODM
-- **Environment Management**: `dotenv` with `.env` configuration (`JWT_SECRET`, `MONGODB_URI`)
+### Key Build 5 Features
+1. **Android Focus / DND Mode Receiver (`mobile/AndroidStudyModeReceiver.java`)**:
+   - Native BroadcastReceiver listening for `ACTION_INTERRUPTION_FILTER_CHANGED`.
+   - Records session start timestamp when Focus/DND mode activates, auto-computes duration when deactivated, and dispatches to backend with `deviceCategory: "Phone Time"`.
+2. **Laptop Interaction Tracker (`js/laptop-tracker.js`)**:
+   - Monitors active keyboard and mouse events (`mousemove`, `keydown`, `click`, `scroll`, `touchstart`).
+   - Automatically triggers auto-pause when inactive beyond 60 seconds and auto-resumes session on user activity (labeled "Active Device Time").
+3. **Cross-Device Deduplication (`clientSessionId`)**:
+   - Assigns unique UUID / client session IDs to prevent duplicate records when offline or retrying synchronization across devices.
+4. **Production Deployment Ready**:
+   - Configurable `CORS_ORIGIN` environment variable.
+   - Stack traces hidden in production (`NODE_ENV=production`).
+   - Atlas MongoDB URI connection support.
+5. **Expanded Dashboard KPI Cards**:
+   - Displays 5 core metrics: **Today's Focus Time**, **Weekly Focused Time**, **Monthly Focused Time**, **Tracked Phone Focus Time**, and **Laptop Active Time**.
 
 ---
 
 ### Project Structure
 ```text
 StudyTrace/
-├── .env                  # Private environment variables (PORT, MONGODB_URI, JWT_SECRET)
+├── .env                  # Private environment variables (PORT, MONGODB_URI, JWT_SECRET, CORS_ORIGIN)
 ├── .env.example          # Environment template
 ├── .gitignore            # Git exclusion rules (node_modules, .env)
 ├── package.json          # Node project manifest & dependencies
-├── server.js             # Express application entry point & static server
+├── server.js             # Express application entry point, CORS & static server
+├── mobile/
+│   └── AndroidStudyModeReceiver.java # Android Focus/DND BroadcastReceiver auto-sync handler
 ├── server/
 │   ├── config/
 │   │   └── db.js         # Mongoose connection manager with quick timeout & fallback
 │   ├── controllers/
-│   │   ├── authController.js      # User registration, login, & me endpoints
-│   │   ├── sessionController.js   # Scoped user session CRUD logic
-│   │   └── analyticsController.js # Scoped aggregated KPI & chart metrics
+│   │   ├── authController.js      # User registration, login, & profile endpoints
+│   │   ├── sessionController.js   # Scoped user session CRUD logic with deduplication
+│   │   └── analyticsController.js # Scoped 5-metric KPI & chart aggregation
 │   ├── middleware/
 │   │   ├── authMiddleware.js      # JWT token verification protector
 │   │   ├── validateSession.js     # Input validation middleware
-│   │   └── errorHandler.js        # Centralized 400, 401, 404, 500 error handlers
+│   │   └── errorHandler.js        # Centralized error handler (hides stack traces in production)
 │   ├── models/
 │   │   ├── User.js       # User schema (name, email, passwordHash, createdAt)
-│   │   └── Session.js    # Session schema (userId, startTime, endTime, duration, device)
+│   │   └── Session.js    # Session schema (userId, startTime, endTime, duration, device, deviceCategory, clientSessionId)
 │   ├── routes/
 │   │   ├── authRoutes.js          # /api/auth routing
 │   │   ├── sessionRoutes.js       # /api/sessions routing (protected)
 │   │   └── analyticsRoutes.js     # /api/analytics routing (protected)
 │   └── services/
-│       ├── analyticsService.js    # Business logic for KPIs, streaks & charts
-│       └── sessionStore.js        # Dual-mode data persistence adapter
+│       ├── analyticsService.js    # Business logic for 5 core KPIs, streaks & charts
+│       └── sessionStore.js        # Dual-mode persistence adapter with clientSessionId deduplication
 ├── css/
-│   └── style.css         # Complete responsive styles & auth modal theme
+│   └── style.css         # Complete responsive styles & cyber glassmorphic theme
 ├── js/
 │   ├── auth.js           # Client-side authentication service & token manager
 │   ├── api.js            # REST client with JWT Bearer header injection
-│   ├── storage.js        # LocalStorage persistence manager & cache
+│   ├── storage.js        # LocalStorage persistence manager & offline cache
 │   ├── timer.js          # Live timer engine with drift-free tracking
+│   ├── mobile-tracker.js # Mobile focus mode web bridge & simulation
+│   ├── laptop-tracker.js # Laptop interaction & inactivity auto-pause tracker
 │   ├── analytics.js      # Client-side analytics & Chart.js renderers
 │   ├── cyber-bg.js       # Interactive dynamic canvas mesh background
 │   └── app.js            # Main application controller & view switcher
-├── index.html            # Main single-page web app with Auth Modal
+├── index.html            # Main single-page web app with 5 core KPI cards & Auth Modal
 └── README.md             # Project documentation
 ```
 
@@ -81,10 +94,10 @@ StudyTrace/
 | `POST` | `/api/auth/login` | Public | Authenticate user & return JWT token | `200 OK`, `401 Unauthorized` |
 | `GET` | `/api/auth/me` | Protected | Fetch current logged-in user profile | `200 OK`, `401 Unauthorized` |
 
-#### Session Endpoints (Scoped to Authenticated User)
+#### Session Endpoints (Scoped to Authenticated User with Deduplication)
 | Method | Endpoint | Protection | Description | Status Codes |
 |---|---|---|---|---|
-| `POST` | `/api/sessions` | Protected | Create a new study session for logged-in user | `201 Created`, `400 Bad Request` |
+| `POST` | `/api/sessions` | Protected | Create or update session with `clientSessionId` deduplication | `201 Created`, `200 OK` |
 | `GET` | `/api/sessions` | Protected | Retrieve study sessions for logged-in user | `200 OK`, `401 Unauthorized` |
 | `GET` | `/api/sessions/:id` | Protected | Retrieve a specific session by ID | `200 OK`, `404 Not Found` |
 | `PUT` | `/api/sessions/:id` | Protected | Update owned session details | `200 OK`, `404 Not Found` |
@@ -95,7 +108,7 @@ StudyTrace/
 | Method | Endpoint | Protection | Description | Status Codes |
 |---|---|---|---|---|
 | `GET` | `/api/health` | Public | Server uptime and MongoDB connection state | `200 OK` |
-| `GET` | `/api/analytics/summary` | Protected | Scoped aggregated KPIs (Totals, Averages, Streaks) | `200 OK` |
+| `GET` | `/api/analytics/summary` | Protected | Scoped aggregated 5-KPI summary (Today, Weekly, Monthly, Phone, Laptop) | `200 OK` |
 | `GET` | `/api/analytics/charts` | Protected | Scoped precomputed weekly, monthly, doughnut charts | `200 OK` |
 
 ---
@@ -107,11 +120,12 @@ StudyTrace/
    npm install
    ```
 
-2. **Start the Production Server**:
+2. **Start the Server**:
    ```bash
    npm start
    ```
 
-3. **Access the App**:
+3. **Access the Application**:
    Open [http://localhost:5000](http://localhost:5000) in your browser.
-   Sign up or sign in to synchronize your study session history across devices in real time via MongoDB Cloud!
+   Sign up or sign in to track and sync focused study sessions automatically across laptop and mobile devices!
+

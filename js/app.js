@@ -25,9 +25,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnStop = document.getElementById('btn-stop-session');
   const quickTags = document.querySelectorAll('.quick-tag');
   
-  // Dashboard Stats Elements
+  // Dashboard Stats Elements (5 Core Build 5 Metrics)
   const statTodayTime = document.getElementById('stat-today-time');
   const statTodaySessions = document.getElementById('stat-today-sessions');
+  const statWeeklyTime = document.getElementById('stat-weekly-time');
+  const statMonthlyTime = document.getElementById('stat-monthly-time');
+  const statPhoneTime = document.getElementById('stat-phone-time');
+  const statLaptopTime = document.getElementById('stat-laptop-time');
+  const laptopTrackerBadge = document.getElementById('laptop-tracker-badge');
   const statStreakDays = document.getElementById('stat-streak-days');
   const statStreakSubtitle = document.getElementById('stat-streak-subtitle');
   const statGoalProgress = document.getElementById('stat-goal-progress');
@@ -319,33 +324,87 @@ document.addEventListener('DOMContentLoaded', () => {
   // 8. Render Dashboard View
   async function refreshDashboard() {
     const sessions = window.API ? await API.getSessions() : Storage.getSessions();
-    const todaySeconds = Analytics.getTodayTotalSeconds(sessions);
+    const summary = window.API ? await API.getAnalyticsSummary() : null;
+
+    const todaySeconds = summary ? summary.todayFocusedSeconds : Analytics.getTodayTotalSeconds(sessions);
     const todaySessionsCount = Analytics.getTodaySessionCount(sessions);
-    const streak = Analytics.calculateStreak(sessions);
+    const streak = summary ? summary.currentStreak : Analytics.calculateStreak(sessions);
     const dailyGoalMinutes = Storage.getDailyGoalMinutes();
     const goalSeconds = dailyGoalMinutes * 60;
 
-    // A. Today's Focus Time
-    statTodayTime.textContent = Analytics.formatDuration(todaySeconds);
-    statTodaySessions.textContent = `${todaySessionsCount} session${todaySessionsCount === 1 ? '' : 's'} today`;
+    // 1. Today's Focus Time
+    if (statTodayTime) {
+      statTodayTime.textContent = summary ? summary.todayFocusedFormatted : Analytics.formatDuration(todaySeconds);
+    }
+    if (statTodaySessions) {
+      statTodaySessions.textContent = `${todaySessionsCount} session${todaySessionsCount === 1 ? '' : 's'} today`;
+    }
+
+    // 2. Weekly Focused Time
+    if (statWeeklyTime) {
+      if (summary) {
+        statWeeklyTime.textContent = summary.weeklyFocusedFormatted;
+      } else {
+        const weekHrs = Analytics.getCurrentWeekData(sessions).valuesHours.reduce((a, b) => a + b, 0);
+        statWeeklyTime.textContent = Analytics.formatDuration(Math.round(weekHrs * 3600));
+      }
+    }
+
+    // 3. Monthly Focused Time
+    if (statMonthlyTime) {
+      if (summary) {
+        statMonthlyTime.textContent = summary.monthlyFocusedFormatted;
+      } else {
+        const monthHrs = Analytics.getCurrentMonthData(sessions).valuesHours.reduce((a, b) => a + b, 0);
+        statMonthlyTime.textContent = Analytics.formatDuration(Math.round(monthHrs * 3600));
+      }
+    }
+
+    // 4. Phone Time
+    if (statPhoneTime) {
+      if (summary) {
+        statPhoneTime.textContent = summary.phoneTimeFormatted;
+      } else {
+        const phoneSec = sessions
+          .filter(s => s.deviceCategory === 'Phone Time' || s.device === 'Mobile')
+          .reduce((sum, s) => sum + (s.durationSeconds || s.duration || 0), 0);
+        statPhoneTime.textContent = Analytics.formatDuration(phoneSec);
+      }
+    }
+
+    // 5. Laptop Active Time
+    if (statLaptopTime) {
+      if (summary) {
+        statLaptopTime.textContent = summary.laptopActiveFormatted;
+      } else {
+        const laptopSec = sessions
+          .filter(s => s.deviceCategory === 'Laptop Active Time' || s.device !== 'Mobile')
+          .reduce((sum, s) => sum + (s.durationSeconds || s.duration || 0), 0);
+        statLaptopTime.textContent = Analytics.formatDuration(laptopSec);
+      }
+    }
 
     // B. Daily Goal Progress
     const goalPercent = Math.min(100, Math.round((todaySeconds / goalSeconds) * 100));
-    statGoalProgress.textContent = `${(todaySeconds / 3600).toFixed(1)} / ${(dailyGoalMinutes / 60).toFixed(1)} hrs`;
-    statGoalPercent.textContent = `${goalPercent}%`;
-    goalProgressBar.style.width = `${goalPercent}%`;
-    if (goalPercent >= 100) {
-      goalProgressBar.classList.add('goal-reached');
-    } else {
-      goalProgressBar.classList.remove('goal-reached');
+    if (statGoalProgress) statGoalProgress.textContent = `${(todaySeconds / 3600).toFixed(1)} / ${(dailyGoalMinutes / 60).toFixed(1)} hrs`;
+    if (statGoalPercent) statGoalPercent.textContent = `${goalPercent}%`;
+    if (goalProgressBar) {
+      goalProgressBar.style.width = `${goalPercent}%`;
+      if (goalPercent >= 100) {
+        goalProgressBar.classList.add('goal-reached');
+      } else {
+        goalProgressBar.classList.remove('goal-reached');
+      }
     }
 
     // C. Study Streak
-    statStreakDays.textContent = `${streak} Day${streak === 1 ? '' : 's'}`;
-    if (streak > 0) {
-      statStreakSubtitle.textContent = '🔥 Consistency is on track!';
-    } else {
-      statStreakSubtitle.textContent = 'Start a session to start your streak';
+    if (statStreakDays) statStreakDays.textContent = `${streak} Day${streak === 1 ? '' : 's'}`;
+    if (statStreakSubtitle) {
+      if (streak > 0) {
+        statStreakSubtitle.textContent = '🔥 Consistency is on track!';
+      } else {
+        statStreakSubtitle.textContent = 'Start a session to start your streak';
+      }
     }
 
     // D. Weekly Chart on Dashboard
@@ -580,6 +639,36 @@ document.addEventListener('DOMContentLoaded', () => {
     return div.innerHTML;
   }
 
+  // Auto-pause & resume functions for Laptop interaction tracking
+  function autoPauseSession() {
+    if (timer.isRunning() && !timer.isPaused) {
+      timer.pause();
+      if (timerStatus) timerStatus.textContent = "Auto-Paused (Idle > 60s)";
+      if (timerStatusDot) timerStatusDot.className = "status-dot idle";
+      if (laptopTrackerBadge) {
+        laptopTrackerBadge.textContent = "💤 Laptop Idle Auto-Paused";
+        laptopTrackerBadge.style.borderColor = "var(--amber)";
+      }
+    }
+  }
+
+  function autoResumeSession() {
+    if (timer.isRunning() && timer.isPaused) {
+      timer.resume();
+      if (timerStatus) timerStatus.textContent = `Focusing on: ${subjectInput.value || 'Study Session'}`;
+      if (timerStatusDot) timerStatusDot.className = "status-dot active";
+      if (laptopTrackerBadge) {
+        laptopTrackerBadge.textContent = "💻 Laptop Active Tracker";
+        laptopTrackerBadge.style.borderColor = "rgba(6, 182, 212, 0.3)";
+      }
+    }
+  }
+
+  // Mobile Focus state listener
+  window.onMobileTrackerStateChange = (isActive, msg) => {
+    refreshDashboard();
+  };
+
   // 14. Event Listeners for Session Start & Stop
   btnStart.addEventListener('click', () => {
     if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) {
@@ -598,10 +687,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     timer.start(subject, currentDevice, startTime);
     setSessionUIState(true, subject);
+
+    // Start Laptop Inactivity Monitoring
+    if (window.LaptopTracker) {
+      window.LaptopTracker.startMonitoring({
+        onIdle: autoPauseSession,
+        onActive: autoResumeSession
+      });
+    }
   });
 
   btnStop.addEventListener('click', async () => {
     if (!timer.isRunning()) return;
+
+    if (window.LaptopTracker) {
+      window.LaptopTracker.stopMonitoring();
+    }
 
     const summary = timer.stop();
     Storage.clearActiveSession();
@@ -612,8 +713,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const newSession = {
       id: 'session_' + Date.now(),
+      clientSessionId: 'web_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       userId: user ? user.id : 'student-default',
       subject: summary.subject,
+      deviceCategory: 'Laptop Active Time',
       startTime: summary.startTime,
       endTime: summary.endTime,
       durationSeconds: summary.durationSeconds,

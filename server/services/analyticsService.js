@@ -41,6 +41,42 @@ class AnalyticsService {
     const totalSeconds = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
     const totalSessions = sessions.length;
 
+    // Calculate Build 5 Specific Metrics across all user sessions
+    const now = new Date();
+    const todayStr = getLocalDateString(now);
+
+    // 1. Today Focused Seconds
+    const todayFocusedSeconds = allSessions
+      .filter(s => getLocalDateString(s.startTime) === todayStr)
+      .reduce((sum, s) => sum + (s.duration || 0), 0);
+
+    // 2. Weekly Focused Seconds (Current Week Mon-Sun)
+    const currentDay = now.getDay();
+    const diffToMon = (currentDay === 0 ? -6 : 1) - currentDay;
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() + diffToMon);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const weeklyFocusedSeconds = allSessions
+      .filter(s => new Date(s.startTime) >= startOfWeek)
+      .reduce((sum, s) => sum + (s.duration || 0), 0);
+
+    // 3. Monthly Focused Seconds (Current Calendar Month)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthlyFocusedSeconds = allSessions
+      .filter(s => new Date(s.startTime) >= startOfMonth)
+      .reduce((sum, s) => sum + (s.duration || 0), 0);
+
+    // 4. Phone Time Seconds
+    const phoneTimeSeconds = allSessions
+      .filter(s => s.deviceCategory === 'Phone Time' || s.device === 'Mobile')
+      .reduce((sum, s) => sum + (s.duration || 0), 0);
+
+    // 5. Laptop Active Seconds
+    const laptopActiveSeconds = allSessions
+      .filter(s => s.deviceCategory === 'Laptop Active Time' || s.device === 'Desktop' || s.device === 'Laptop' || (!s.deviceCategory && s.device !== 'Mobile'))
+      .reduce((sum, s) => sum + (s.duration || 0), 0);
+
     // Distinct active study days in this range
     const activeDates = new Set(sessions.map(s => getLocalDateString(s.startTime)));
     const activeDaysCount = activeDates.size || 1;
@@ -81,6 +117,16 @@ class AnalyticsService {
       totalSeconds,
       totalDurationFormatted: formatDuration(totalSeconds),
       totalHoursDecimal: parseFloat((totalSeconds / 3600).toFixed(1)),
+      todayFocusedSeconds,
+      todayFocusedFormatted: formatDuration(todayFocusedSeconds),
+      weeklyFocusedSeconds,
+      weeklyFocusedFormatted: formatDuration(weeklyFocusedSeconds),
+      monthlyFocusedSeconds,
+      monthlyFocusedFormatted: formatDuration(monthlyFocusedSeconds),
+      phoneTimeSeconds,
+      phoneTimeFormatted: formatDuration(phoneTimeSeconds),
+      laptopActiveSeconds,
+      laptopActiveFormatted: formatDuration(laptopActiveSeconds),
       totalSessions,
       averageDailySeconds,
       averageDailyFormatted: formatDuration(averageDailySeconds),

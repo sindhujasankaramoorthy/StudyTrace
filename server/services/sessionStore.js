@@ -1,8 +1,6 @@
 /**
- * Session Data Store Adapter
- * Seamlessly routes queries to MongoDB (Mongoose) when connected,
- * or to a fast in-memory store when MongoDB is offline (e.g. ECONNREFUSED).
- * Completely eliminates Mongoose buffering timeout errors.
+ * Session Data Store Adapter (Build 5 with Deduplication)
+ * Routes queries to MongoDB (Mongoose) when connected, or to an in-memory store.
  */
 
 const mongoose = require('mongoose');
@@ -31,6 +29,7 @@ let inMemorySessions = [
     durationSeconds: 5400,
     date: getLocalDateString(Date.now() - 86400000 * 3),
     device: 'Laptop',
+    deviceCategory: 'Laptop Active Time',
     createdAt: new Date(Date.now() - 86400000 * 3)
   },
   {
@@ -44,6 +43,7 @@ let inMemorySessions = [
     durationSeconds: 3600,
     date: getLocalDateString(Date.now() - 86400000 * 2),
     device: 'Laptop',
+    deviceCategory: 'Laptop Active Time',
     createdAt: new Date(Date.now() - 86400000 * 2)
   },
   {
@@ -57,6 +57,7 @@ let inMemorySessions = [
     durationSeconds: 2700,
     date: getLocalDateString(Date.now() - 86400000 * 2),
     device: 'Mobile',
+    deviceCategory: 'Phone Time',
     createdAt: new Date(Date.now() - 86400000 * 2)
   },
   {
@@ -70,6 +71,7 @@ let inMemorySessions = [
     durationSeconds: 5400,
     date: getLocalDateString(Date.now() - 86400000),
     device: 'Laptop',
+    deviceCategory: 'Laptop Active Time',
     createdAt: new Date(Date.now() - 86400000)
   },
   {
@@ -83,6 +85,7 @@ let inMemorySessions = [
     durationSeconds: 2400,
     date: getLocalDateString(Date.now() - 86400000),
     device: 'Mobile',
+    deviceCategory: 'Phone Time',
     createdAt: new Date(Date.now() - 86400000)
   },
   {
@@ -96,16 +99,40 @@ let inMemorySessions = [
     durationSeconds: 3600,
     date: getLocalDateString(Date.now()),
     device: 'Laptop',
+    deviceCategory: 'Laptop Active Time',
     createdAt: new Date()
   }
 ];
 
 class SessionStore {
   /**
-   * Create a new session
+   * Create or update session with deduplication via clientSessionId
    */
   static async create(sessionData) {
+    const { clientSessionId, userId = 'student-default' } = sessionData;
+
     if (isDBConnected()) {
+      if (clientSessionId) {
+        const existing = await Session.findOne({ userId, clientSessionId });
+        if (existing) {
+          existing.startTime = new Date(sessionData.startTime);
+          existing.endTime = new Date(sessionData.endTime);
+          existing.duration = Number(sessionData.duration);
+          existing.subject = sessionData.subject || existing.subject;
+          existing.device = sessionData.device || existing.device;
+          existing.deviceCategory = sessionData.deviceCategory || existing.deviceCategory;
+          await existing.save();
+
+          const obj = existing.toObject({ virtuals: true });
+          return {
+            ...obj,
+            id: existing._id.toString(),
+            date: getLocalDateString(existing.startTime),
+            durationSeconds: existing.duration
+          };
+        }
+      }
+
       const doc = await Session.create(sessionData);
       const obj = doc.toObject({ virtuals: true });
       return {
@@ -117,17 +144,33 @@ class SessionStore {
     }
 
     // In-memory fallback
-    const id = 'session_' + Date.now();
+    if (clientSessionId) {
+      const existingMem = inMemorySessions.find(s => s.userId === userId && s.clientSessionId === clientSessionId);
+      if (existingMem) {
+        existingMem.startTime = new Date(sessionData.startTime);
+        existingMem.endTime = new Date(sessionData.endTime);
+        existingMem.duration = Number(sessionData.duration);
+        existingMem.durationSeconds = Number(sessionData.duration);
+        existingMem.subject = sessionData.subject || existingMem.subject;
+        existingMem.device = sessionData.device || existingMem.device;
+        existingMem.deviceCategory = sessionData.deviceCategory || existingMem.deviceCategory;
+        return existingMem;
+      }
+    }
+
+    const id = clientSessionId || ('session_' + Date.now());
     const newSession = {
       _id: id,
       id,
-      userId: sessionData.userId || 'student-default',
+      userId,
+      clientSessionId,
       subject: sessionData.subject || 'General Study',
       startTime: new Date(sessionData.startTime),
       endTime: new Date(sessionData.endTime),
       duration: Number(sessionData.duration),
       durationSeconds: Number(sessionData.duration),
       device: sessionData.device || 'Laptop',
+      deviceCategory: sessionData.deviceCategory || 'Laptop Active Time',
       date: getLocalDateString(sessionData.startTime),
       createdAt: new Date()
     };
@@ -139,12 +182,13 @@ class SessionStore {
    * Find sessions matching criteria
    */
   static async find(query = {}) {
-    const { userId = 'student-default', filter, date, subject, device } = query;
+    const { userId = 'student-default', filter, date, subject, device, deviceCategory } = query;
 
     if (isDBConnected()) {
       const dbQuery = { userId };
       if (subject) dbQuery.subject = new RegExp(subject, 'i');
       if (device) dbQuery.device = device;
+      if (deviceCategory) dbQuery.deviceCategory = deviceCategory;
 
       const today = new Date();
       if (filter === 'today') {
@@ -189,6 +233,9 @@ class SessionStore {
     }
     if (device) {
       result = result.filter(s => s.device === device);
+    }
+    if (deviceCategory) {
+      result = result.filter(s => s.deviceCategory === deviceCategory);
     }
 
     const todayStr = getLocalDateString(new Date());
@@ -250,6 +297,7 @@ class SessionStore {
       if (updateData.endTime) session.endTime = new Date(updateData.endTime);
       if (updateData.duration) session.duration = Number(updateData.duration);
       if (updateData.device) session.device = updateData.device;
+      if (updateData.deviceCategory) session.deviceCategory = updateData.deviceCategory;
 
       await session.save();
       return {

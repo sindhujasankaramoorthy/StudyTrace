@@ -76,10 +76,10 @@
          ==================================================================== -->
     <div id="view-dashboard" class="app-view active">
       
-      <!-- Top Metrics Overview Grid (Today's Time, Daily Goal, Study Streak) -->
-      <section class="metrics-grid" aria-label="Study Metrics Overview">
+      <!-- Top Metrics Overview Grid (5 Core Metrics: Today, Weekly, Monthly, Phone Time, Laptop Active Time) -->
+      <section class="metrics-grid metrics-grid-5" aria-label="Study Metrics Overview">
         
-        <!-- 1. Total Study Time Today -->
+        <!-- 1. Today's Focus Time -->
         <article class="metric-card" id="card-today-time">
           <div class="metric-card-top">
             <span class="metric-label">Today's Focus Time</span>
@@ -91,8 +91,60 @@
           </div>
         </article>
 
-        <!-- 2. Daily Goal & Progress -->
-        <article class="metric-card" id="card-daily-goal">
+        <!-- 2. Weekly Focused Time -->
+        <article class="metric-card" id="card-weekly-time">
+          <div class="metric-card-top">
+            <span class="metric-label">Weekly Focused Time</span>
+            <div class="metric-icon-wrap" aria-hidden="true">📅</div>
+          </div>
+          <div>
+            <div class="metric-value" id="stat-weekly-time">0m</div>
+            <div class="metric-sub">Current Mon &ndash; Sun</div>
+          </div>
+        </article>
+
+        <!-- 3. Monthly Focused Time -->
+        <article class="metric-card" id="card-monthly-time">
+          <div class="metric-card-top">
+            <span class="metric-label">Monthly Focused Time</span>
+            <div class="metric-icon-wrap" aria-hidden="true">📊</div>
+          </div>
+          <div>
+            <div class="metric-value" id="stat-monthly-time">0m</div>
+            <div class="metric-sub">Current calendar month</div>
+          </div>
+        </article>
+
+        <!-- 4. Tracked Phone Focus Time -->
+        <article class="metric-card" id="card-phone-time">
+          <div class="metric-card-top">
+            <span class="metric-label">Phone Time</span>
+            <div class="metric-icon-wrap" aria-hidden="true">📱</div>
+          </div>
+          <div>
+            <div class="metric-value" id="stat-phone-time">0m</div>
+            <div class="metric-sub">Tracked Phone Focus</div>
+          </div>
+        </article>
+
+        <!-- 5. Laptop Active Time -->
+        <article class="metric-card" id="card-laptop-time">
+          <div class="metric-card-top">
+            <span class="metric-label">Laptop Active Time</span>
+            <div class="metric-icon-wrap" aria-hidden="true">💻</div>
+          </div>
+          <div>
+            <div class="metric-value" id="stat-laptop-time">0m</div>
+            <div class="metric-sub">Active Device Time</div>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- Secondary Goal & Streak Banner Grid -->
+      <section class="secondary-metrics-grid" aria-label="Daily Goal & Study Streak">
+        <!-- Daily Goal & Progress -->
+        <article class="metric-card goal-banner-card" id="card-daily-goal">
           <div class="metric-card-top">
             <span class="metric-label">Daily Study Goal</span>
             <div class="metric-icon-wrap" aria-hidden="true">🎯</div>
@@ -111,8 +163,8 @@
           </div>
         </article>
 
-        <!-- 3. Study Streak -->
-        <article class="metric-card" id="card-study-streak">
+        <!-- Study Streak -->
+        <article class="metric-card streak-mini-card" id="card-study-streak">
           <div class="metric-card-top">
             <span class="metric-label">Study Streak</span>
             <div class="metric-icon-wrap" aria-hidden="true">🔥</div>
@@ -122,7 +174,6 @@
             <div class="metric-sub" id="stat-streak-subtitle">Start a session to build consistency</div>
           </div>
         </article>
-
       </section>
 
       <!-- Main Workspace (Active Session Controller & Weekly Overview Chart) -->
@@ -138,9 +189,12 @@
               </svg>
               Current Session
             </h2>
-            <div class="status-badge">
-              <span class="status-dot idle" id="timer-status-dot"></span>
-              <span id="timer-status">Ready to focus</span>
+            <div class="status-group">
+              <span class="tracker-badge" id="laptop-tracker-badge" title="Monitors active keyboard & mouse interactions">💻 Active Device Monitor</span>
+              <div class="status-badge">
+                <span class="status-dot idle" id="timer-status-dot"></span>
+                <span id="timer-status">Ready to focus</span>
+              </div>
             </div>
           </div>
 
@@ -501,6 +555,8 @@
   <script src="js/auth.js"></script>
   <script src="js/api.js"></script>
   <script src="js/timer.js"></script>
+  <script src="js/mobile-tracker.js"></script>
+  <script src="js/laptop-tracker.js"></script>
   <script src="js/analytics.js"></script>
   <script src="js/cyber-bg.js"></script>
   <script src="js/app.js"></script>

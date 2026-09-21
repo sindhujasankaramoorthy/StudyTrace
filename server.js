@@ -22,7 +22,8 @@ const PORT = process.env.PORT || 5000;
 connectDB();
 
 // Core Middleware
-app.use(cors());
+const corsOrigin = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*';
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
