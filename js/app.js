@@ -1,11 +1,12 @@
 /**
- * StudyTrace - Main Application Controller (Build 2)
+ * StudyTrace - Main Application Controller (Build 3)
  * Coordinates UI interactions, multi-view navigation, live timer lifecycle,
- * session filtering, advanced analytics, and data management.
+ * session filtering, advanced analytics, and data synchronization with
+ * the Express/MongoDB REST API (with offline LocalStorage fallback).
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  // 1. Initialize Local Storage
+  // 1. Initialize Local Storage (as local cache and offline fallback)
   Storage.init();
 
   // 2. DOM Elements - Views & Navigation
@@ -37,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Header & Device Elements
   const headerDate = document.getElementById('header-date');
   const deviceBadge = document.getElementById('header-device-badge');
+  const headerBackendStatus = document.getElementById('header-backend-status');
 
   // Recent Sessions Elements (Dashboard)
   const recentSessionsContainer = document.getElementById('recent-sessions-container');
@@ -84,33 +86,57 @@ document.addEventListener('DOMContentLoaded', () => {
     headerDate.textContent = new Date().toLocaleDateString(undefined, todayOptions);
   }
 
-  // 3. View Switcher Logic
-  function switchView(targetView) {
+  // 3. Backend REST Connection Status Indicator
+  function updateBackendBadge(isOnline, details = null) {
+    if (!headerBackendStatus) return;
+    if (isOnline) {
+      const dbText = (details && details.database === 'connected') ? ' (MongoDB)' : ' (Live REST)';
+      headerBackendStatus.className = 'header-badge online';
+      headerBackendStatus.innerHTML = `🟢 Cloud Synced${dbText}`;
+      headerBackendStatus.title = (details && details.database === 'connected')
+        ? 'Connected to StudyTrace Express & MongoDB REST API'
+        : 'Connected to StudyTrace Express REST API (in-memory fallback)';
+    } else {
+      headerBackendStatus.className = 'header-badge offline';
+      headerBackendStatus.innerHTML = `💾 Local Mode`;
+      headerBackendStatus.title = 'Operating locally via LocalStorage fallback. Start server on :5000 to sync.';
+    }
+  }
+
+  if (window.API) {
+    API.onStatusChange(updateBackendBadge);
+    API.checkHealth();
+  } else {
+    updateBackendBadge(false);
+  }
+
+  // 4. View Switcher Logic
+  async function switchView(targetView) {
     if (targetView === 'dashboard') {
       tabDashboard.classList.add('active');
       tabHistory.classList.remove('active');
       viewDashboard.style.display = 'block';
       viewHistory.style.display = 'none';
-      refreshDashboard();
+      await refreshDashboard();
     } else if (targetView === 'history') {
       tabHistory.classList.add('active');
       tabDashboard.classList.remove('active');
       viewDashboard.style.display = 'none';
       viewHistory.style.display = 'block';
-      refreshHistoryAndAnalytics();
+      await refreshHistoryAndAnalytics();
     }
   }
 
   tabDashboard.addEventListener('click', () => switchView('dashboard'));
   tabHistory.addEventListener('click', () => switchView('history'));
 
-  // 4. Initialize Live Timer instance
+  // 5. Initialize Live Timer instance
   const timer = new StudyTimer((formattedTime, elapsedSeconds) => {
     timerDisplay.textContent = formattedTime;
     document.title = `(${formattedTime}) StudyTrace`;
   });
 
-  // 5. Update UI State for Running/Idle Session
+  // 6. Update UI State for Running/Idle Session
   function setSessionUIState(isRunning, subject = '') {
     if (isRunning) {
       sessionCard.classList.add('session-active');
@@ -131,9 +157,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 6. Render Dashboard View
-  function refreshDashboard() {
-    const sessions = Storage.getSessions();
+  // 7. Render Dashboard View
+  async function refreshDashboard() {
+    const sessions = window.API ? await API.getSessions() : Storage.getSessions();
     const todaySeconds = Analytics.getTodayTotalSeconds(sessions);
     const todaySessionsCount = Analytics.getTodaySessionCount(sessions);
     const streak = Analytics.calculateStreak(sessions);
@@ -170,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderRecentSessionsDashboard(sessions);
   }
 
-  // 7. Render Dashboard Recent Sessions List
+  // 8. Render Dashboard Recent Sessions List
   function renderRecentSessionsDashboard(sessions) {
     if (!sessions || sessions.length === 0) {
       recentSessionsContainer.innerHTML = `
@@ -188,9 +214,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const timeStr = sessionDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const dateStr = sessionDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
       const deviceIcon = session.device === 'Mobile' ? '📱' : '💻';
+      const sessionId = session.id || session._id;
 
       return `
-        <div class="session-row" data-id="${session.id}">
+        <div class="session-row" data-id="${sessionId}">
           <div class="session-info">
             <div class="session-title-wrap">
               <span class="session-subject">${escapeHtml(session.subject || 'General Study')}</span>
@@ -201,8 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>
           <div class="session-meta">
-            <span class="duration-badge">${Analytics.formatDuration(session.durationSeconds)}</span>
-            <button class="btn-delete-session" title="Delete Session" data-id="${session.id}">
+            <span class="duration-badge">${Analytics.formatDuration(session.durationSeconds || session.duration)}</span>
+            <button class="btn-delete-session" title="Delete Session" data-id="${sessionId}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -217,21 +244,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Attach delete handlers
     recentSessionsContainer.querySelectorAll('.btn-delete-session').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.getAttribute('data-id');
-        Storage.deleteSession(id);
-        refreshDashboard();
+        if (window.API) {
+          await API.deleteSession(id);
+        } else {
+          Storage.deleteSession(id);
+        }
+        await refreshDashboard();
         if (viewHistory.style.display !== 'none') {
-          refreshHistoryAndAnalytics();
+          await refreshHistoryAndAnalytics();
         }
       });
     });
   }
 
-  // 8. Render History & Advanced Analytics View (Build 2)
-  function refreshHistoryAndAnalytics() {
-    const allSessions = Storage.getSessions();
-    const filteredSessions = Analytics.filterSessions(allSessions, activeFilter, customDateValue);
+  // 9. Render History & Advanced Analytics View (Build 2 + Build 3 REST Sync)
+  async function refreshHistoryAndAnalytics() {
+    const allSessions = window.API ? await API.getSessions() : Storage.getSessions();
+    const filteredSessions = window.API
+      ? await API.getSessions({ filter: activeFilter, date: customDateValue })
+      : Analytics.filterSessions(allSessions, activeFilter, customDateValue);
 
     // A. Filter match badge
     const count = filteredSessions.length;
@@ -271,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderHistoryTable(filteredSessions);
   }
 
-  // 9. Render Detailed History Table
+  // 10. Render Detailed History Table
   function renderHistoryTable(sessions) {
     if (!sessions || sessions.length === 0) {
       historyTableBody.innerHTML = `
@@ -292,19 +325,20 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const startTimeStr = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const endTimeStr = endDate ? endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
-      const dateStr = session.date || startDate.toISOString().split('T')[0];
+      const dateStr = session.date || (startDate && !isNaN(startDate) ? startDate.toISOString().split('T')[0] : '-');
       const deviceIcon = session.device === 'Mobile' ? '📱' : '💻';
+      const sessionId = session.id || session._id;
 
       return `
-        <tr data-id="${session.id}">
+        <tr data-id="${sessionId}">
           <td class="table-date-cell">${dateStr}</td>
           <td class="table-subject-cell">${escapeHtml(session.subject || 'General Study')}</td>
           <td class="table-time-cell">${startTimeStr}</td>
           <td class="table-time-cell">${endTimeStr}</td>
-          <td><span class="duration-badge">${Analytics.formatDuration(session.durationSeconds)}</span></td>
+          <td><span class="duration-badge">${Analytics.formatDuration(session.durationSeconds || session.duration)}</span></td>
           <td><span class="device-pill">${deviceIcon} ${session.device || 'Laptop'}</span></td>
           <td>
-            <button class="btn-delete-row" title="Delete session" data-id="${session.id}">
+            <button class="btn-delete-row" title="Delete session" data-id="${sessionId}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -319,39 +353,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Attach row delete handlers
     historyTableBody.querySelectorAll('.btn-delete-row').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.getAttribute('data-id');
-        Storage.deleteSession(id);
-        refreshDashboard();
-        refreshHistoryAndAnalytics();
+        if (window.API) {
+          await API.deleteSession(id);
+        } else {
+          Storage.deleteSession(id);
+        }
+        await refreshDashboard();
+        await refreshHistoryAndAnalytics();
       });
     });
   }
 
-  // 10. Filter Bar Events
+  // 11. Filter Bar Events
   filterButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       filterButtons.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       activeFilter = btn.getAttribute('data-filter');
       customDateValue = null;
       filterCustomDateInput.value = '';
       btnClearDate.style.display = 'none';
-      refreshHistoryAndAnalytics();
+      await refreshHistoryAndAnalytics();
     });
   });
 
-  filterCustomDateInput.addEventListener('change', (e) => {
+  filterCustomDateInput.addEventListener('change', async (e) => {
     if (e.target.value) {
       filterButtons.forEach(b => b.classList.remove('active'));
       activeFilter = 'custom';
       customDateValue = e.target.value;
       btnClearDate.style.display = 'inline-flex';
-      refreshHistoryAndAnalytics();
+      await refreshHistoryAndAnalytics();
     }
   });
 
-  btnClearDate.addEventListener('click', () => {
+  btnClearDate.addEventListener('click', async () => {
     filterCustomDateInput.value = '';
     customDateValue = null;
     btnClearDate.style.display = 'none';
@@ -360,15 +398,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (b.getAttribute('data-filter') === 'all') b.classList.add('active');
       else b.classList.remove('active');
     });
-    refreshHistoryAndAnalytics();
+    await refreshHistoryAndAnalytics();
   });
 
-  // 11. Clear All History Action (Build 2)
-  btnClearAllHistory.addEventListener('click', () => {
+  // 12. Clear All History Action (Build 2 & 3)
+  btnClearAllHistory.addEventListener('click', async () => {
     if (confirm('Are you sure you want to permanently delete all study history? This action cannot be undone.')) {
-      Storage.clearAllSessions();
-      refreshDashboard();
-      refreshHistoryAndAnalytics();
+      if (window.API) {
+        await API.clearAllSessions();
+      } else {
+        Storage.clearAllSessions();
+      }
+      await refreshDashboard();
+      await refreshHistoryAndAnalytics();
     }
   });
 
@@ -379,7 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return div.innerHTML;
   }
 
-  // 12. Event Listeners for Session Start & Stop
+  // 13. Event Listeners for Session Start & Stop
   btnStart.addEventListener('click', () => {
     const subject = subjectInput.value.trim() || 'General Study';
     const startTime = Date.now();
@@ -394,7 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setSessionUIState(true, subject);
   });
 
-  btnStop.addEventListener('click', () => {
+  btnStop.addEventListener('click', async () => {
     if (!timer.isRunning()) return;
 
     const summary = timer.stop();
@@ -404,19 +446,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const todayStr = Analytics.getLocalDateString(new Date(summary.startTime));
     const newSession = {
       id: 'session_' + Date.now(),
+      userId: 'student-default',
       subject: summary.subject,
       startTime: summary.startTime,
       endTime: summary.endTime,
       durationSeconds: summary.durationSeconds,
+      duration: summary.durationSeconds,
       date: todayStr,
       device: summary.device
     };
 
-    Storage.saveSession(newSession);
+    if (window.API) {
+      await API.createSession(newSession);
+    } else {
+      Storage.saveSession(newSession);
+    }
+
     setSessionUIState(false);
-    refreshDashboard();
+    await refreshDashboard();
     if (viewHistory.style.display !== 'none') {
-      refreshHistoryAndAnalytics();
+      await refreshHistoryAndAnalytics();
     }
   });
 
@@ -432,7 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Daily Goal Editor
-  btnEditGoal.addEventListener('click', () => {
+  btnEditGoal.addEventListener('click', async () => {
     const currentGoalMinutes = Storage.getDailyGoalMinutes();
     const currentGoalHours = (currentGoalMinutes / 60).toFixed(1);
     const input = prompt('Enter your daily study target in hours (e.g., 2, 3.5, 4):', currentGoalHours);
@@ -442,32 +491,40 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isNaN(hours) && hours > 0) {
         const minutes = Math.round(hours * 60);
         Storage.setDailyGoalMinutes(minutes);
-        refreshDashboard();
+        await refreshDashboard();
       }
     }
   });
 
   // Clear all sessions (Dashboard quick action)
   if (btnClearAll) {
-    btnClearAll.addEventListener('click', () => {
+    btnClearAll.addEventListener('click', async () => {
       if (confirm('Are you sure you want to clear all recorded sessions?')) {
-        Storage.clearAllSessions();
-        refreshDashboard();
-        refreshHistoryAndAnalytics();
+        if (window.API) {
+          await API.clearAllSessions();
+        } else {
+          Storage.clearAllSessions();
+        }
+        await refreshDashboard();
+        if (viewHistory.style.display !== 'none') {
+          await refreshHistoryAndAnalytics();
+        }
       }
     });
   }
 
   // Reset sample data
   if (btnAddSample) {
-    btnAddSample.addEventListener('click', () => {
+    btnAddSample.addEventListener('click', async () => {
       Storage.resetSampleData();
-      refreshDashboard();
-      refreshHistoryAndAnalytics();
+      await refreshDashboard();
+      if (viewHistory.style.display !== 'none') {
+        await refreshHistoryAndAnalytics();
+      }
     });
   }
 
-  // 13. Check and Resume Active Session on page reload
+  // 14. Check and Resume Active Session on page reload
   const activeSession = Storage.getActiveSession();
   if (activeSession && activeSession.startTime) {
     subjectInput.value = activeSession.subject || 'General Study';
