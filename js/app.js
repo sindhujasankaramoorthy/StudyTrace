@@ -324,17 +324,23 @@ document.addEventListener('DOMContentLoaded', () => {
   // 8. Render Dashboard View
   async function refreshDashboard() {
     const sessions = window.API ? await API.getSessions() : Storage.getSessions();
-    const summary = window.API ? await API.getAnalyticsSummary() : null;
+    const summary = (window.API && API.isServerOnline) ? await API.getAnalyticsSummary() : null;
 
-    const todaySeconds = summary ? summary.todayFocusedSeconds : Analytics.getTodayTotalSeconds(sessions);
-    const todaySessionsCount = Analytics.getTodaySessionCount(sessions);
-    const streak = summary ? summary.currentStreak : Analytics.calculateStreak(sessions);
-    const dailyGoalMinutes = Storage.getDailyGoalMinutes();
-    const goalSeconds = dailyGoalMinutes * 60;
+    const todaySeconds = (summary && typeof summary.todayFocusedSeconds === 'number')
+      ? summary.todayFocusedSeconds
+      : (Analytics.getTodayTotalSeconds(sessions) || 0);
+
+    const todaySessionsCount = Analytics.getTodaySessionCount(sessions) || 0;
+    const streak = (summary && typeof summary.currentStreak === 'number')
+      ? summary.currentStreak
+      : (Analytics.calculateStreak(sessions) || 0);
+
+    const dailyGoalMinutes = Storage.getDailyGoalMinutes() || 180;
+    const goalSeconds = Math.max(60, dailyGoalMinutes * 60);
 
     // 1. Today's Focus Time
     if (statTodayTime) {
-      statTodayTime.textContent = summary ? summary.todayFocusedFormatted : Analytics.formatDuration(todaySeconds);
+      statTodayTime.textContent = (summary && summary.todayFocusedFormatted) ? summary.todayFocusedFormatted : Analytics.formatDuration(todaySeconds);
     }
     if (statTodaySessions) {
       statTodaySessions.textContent = `${todaySessionsCount} session${todaySessionsCount === 1 ? '' : 's'} today`;
@@ -342,7 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. Weekly Focused Time
     if (statWeeklyTime) {
-      if (summary) {
+      if (summary && summary.weeklyFocusedFormatted) {
         statWeeklyTime.textContent = summary.weeklyFocusedFormatted;
       } else {
         const weekHrs = Analytics.getCurrentWeekData(sessions).valuesHours.reduce((a, b) => a + b, 0);
@@ -352,7 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 3. Monthly Focused Time
     if (statMonthlyTime) {
-      if (summary) {
+      if (summary && summary.monthlyFocusedFormatted) {
         statMonthlyTime.textContent = summary.monthlyFocusedFormatted;
       } else {
         const monthHrs = Analytics.getCurrentMonthData(sessions).valuesHours.reduce((a, b) => a + b, 0);
@@ -362,31 +368,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 4. Phone Time
     if (statPhoneTime) {
-      if (summary) {
+      if (summary && summary.phoneTimeFormatted) {
         statPhoneTime.textContent = summary.phoneTimeFormatted;
       } else {
-        const phoneSec = sessions
+        const phoneSec = (sessions || [])
           .filter(s => s.deviceCategory === 'Phone Time' || s.device === 'Mobile')
-          .reduce((sum, s) => sum + (s.durationSeconds || s.duration || 0), 0);
+          .reduce((sum, s) => sum + (Number(s.durationSeconds !== undefined ? s.durationSeconds : s.duration) || 0), 0);
         statPhoneTime.textContent = Analytics.formatDuration(phoneSec);
       }
     }
 
     // 5. Laptop Active Time
     if (statLaptopTime) {
-      if (summary) {
+      if (summary && summary.laptopActiveFormatted) {
         statLaptopTime.textContent = summary.laptopActiveFormatted;
       } else {
-        const laptopSec = sessions
+        const laptopSec = (sessions || [])
           .filter(s => s.deviceCategory === 'Laptop Active Time' || s.device !== 'Mobile')
-          .reduce((sum, s) => sum + (s.durationSeconds || s.duration || 0), 0);
+          .reduce((sum, s) => sum + (Number(s.durationSeconds !== undefined ? s.durationSeconds : s.duration) || 0), 0);
         statLaptopTime.textContent = Analytics.formatDuration(laptopSec);
       }
     }
 
     // B. Daily Goal Progress
-    const goalPercent = Math.min(100, Math.round((todaySeconds / goalSeconds) * 100));
-    if (statGoalProgress) statGoalProgress.textContent = `${(todaySeconds / 3600).toFixed(1)} / ${(dailyGoalMinutes / 60).toFixed(1)} hrs`;
+    const goalPercent = Math.min(100, Math.round(((todaySeconds || 0) / goalSeconds) * 100));
+    if (statGoalProgress) statGoalProgress.textContent = `${((todaySeconds || 0) / 3600).toFixed(1)} / ${(dailyGoalMinutes / 60).toFixed(1)} hrs`;
     if (statGoalPercent) statGoalPercent.textContent = `${goalPercent}%`;
     if (goalProgressBar) {
       goalProgressBar.style.width = `${goalPercent}%`;
@@ -433,6 +439,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const dateStr = sessionDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
       const deviceIcon = session.device === 'Mobile' ? '📱' : '💻';
       const sessionId = session.id || session._id;
+      const isAutoTracked = (session.source === 'study-mode');
+      const autoBadge = isAutoTracked 
+        ? `<span class="auto-tracked-badge" title="Automatically tracked via Android Study Mode">⚡ Auto Tracked &bull; Study Mode</span>` 
+        : '';
 
       return `
         <div class="session-row" data-id="${sessionId}">
@@ -440,6 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="session-title-wrap">
               <span class="session-subject">${escapeHtml(session.subject || 'General Study')}</span>
               <span class="device-pill">${deviceIcon} ${session.device || 'Laptop'}</span>
+              ${autoBadge}
             </div>
             <div class="session-timestamp">
               <span>📅 ${dateStr} at ${timeStr}</span>
@@ -546,11 +557,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const dateStr = session.date || (startDate && !isNaN(startDate) ? startDate.toISOString().split('T')[0] : '-');
       const deviceIcon = session.device === 'Mobile' ? '📱' : '💻';
       const sessionId = session.id || session._id;
+      const isAutoTracked = (session.source === 'study-mode');
+      const autoBadge = isAutoTracked 
+        ? `<br><span class="auto-tracked-badge" title="Automatically tracked via Android Study Mode">⚡ Auto Tracked (Study Mode)</span>` 
+        : '';
 
       return `
         <tr data-id="${sessionId}">
           <td class="table-date-cell">${dateStr}</td>
-          <td class="table-subject-cell">${escapeHtml(session.subject || 'General Study')}</td>
+          <td class="table-subject-cell">${escapeHtml(session.subject || 'General Study')}${autoBadge}</td>
           <td class="table-time-cell">${startTimeStr}</td>
           <td class="table-time-cell">${endTimeStr}</td>
           <td><span class="duration-badge">${Analytics.formatDuration(session.durationSeconds || session.duration)}</span></td>
@@ -664,8 +679,53 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Mobile Focus state listener
+  // Mobile Focus state listener & Web Toggle Button
+  const btnTogglePhoneFocus = document.getElementById('btn-toggle-phone-focus');
+  const phoneFocusStatusText = document.getElementById('phone-focus-status-text');
+
+  if (btnTogglePhoneFocus) {
+    btnTogglePhoneFocus.addEventListener('click', async () => {
+      if (typeof Auth !== 'undefined' && !Auth.isLoggedIn()) {
+        showAuthModal('login');
+        return;
+      }
+
+      if (window.MobileTracker) {
+        if (!window.MobileTracker.isFocusActive) {
+          // Turn Phone Focus Mode ON
+          window.MobileTracker.onFocusStart("Phone Focus Session");
+          const startTime = Date.now();
+          timer.start("Phone Focus Session", "Mobile", startTime);
+          setSessionUIState(true, "Phone Focus Session (Auto)");
+
+          btnTogglePhoneFocus.classList.add('active');
+          if (phoneFocusStatusText) phoneFocusStatusText.textContent = "ON";
+        } else {
+          // Turn Phone Focus Mode OFF
+          btnTogglePhoneFocus.classList.remove('active');
+          if (phoneFocusStatusText) phoneFocusStatusText.textContent = "OFF";
+
+          if (timer.isRunning()) {
+            timer.stop();
+          }
+          await window.MobileTracker.onFocusEnd();
+          setSessionUIState(false);
+          await refreshDashboard();
+        }
+      }
+    });
+  }
+
   window.onMobileTrackerStateChange = (isActive, msg) => {
+    if (btnTogglePhoneFocus && phoneFocusStatusText) {
+      if (isActive) {
+        btnTogglePhoneFocus.classList.add('active');
+        phoneFocusStatusText.textContent = "ON";
+      } else {
+        btnTogglePhoneFocus.classList.remove('active');
+        phoneFocusStatusText.textContent = "OFF";
+      }
+    }
     refreshDashboard();
   };
 
@@ -707,63 +767,164 @@ document.addEventListener('DOMContentLoaded', () => {
     const summary = timer.stop();
     Storage.clearActiveSession();
 
-    // Create session record
     const todayStr = Analytics.getLocalDateString(new Date(summary.startTime));
     const user = (typeof Auth !== 'undefined') ? Auth.getUser() : null;
+
+    const durationSec = Math.max(1, parseInt(summary.durationSeconds, 10) || 1);
+    const chosenSubject = (subjectInput ? subjectInput.value.trim() : '') || summary.subject || 'General';
 
     const newSession = {
       id: 'session_' + Date.now(),
       clientSessionId: 'web_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       userId: user ? user.id : 'student-default',
-      subject: summary.subject,
+      subject: chosenSubject,
       deviceCategory: 'Laptop Active Time',
       startTime: summary.startTime,
       endTime: summary.endTime,
-      durationSeconds: summary.durationSeconds,
-      duration: summary.durationSeconds,
+      durationSeconds: durationSec,
+      duration: durationSec,
       date: todayStr,
-      device: summary.device
+      device: summary.device || 'Laptop'
     };
 
-    if (window.API) {
-      await API.createSession(newSession);
-    } else {
+    try {
+      if (window.API && (typeof Auth !== 'undefined' && Auth.isLoggedIn())) {
+        const savedDoc = await API.createSession(newSession);
+        console.log('[StudyTrace] Saved session to MongoDB:', savedDoc);
+      } else {
+        Storage.saveSession(newSession);
+      }
+    } catch (err) {
+      console.error('[Session Save Error]', err);
       Storage.saveSession(newSession);
-    }
-
-    setSessionUIState(false);
-    await refreshDashboard();
-    if (viewHistory.style.display !== 'none') {
-      await refreshHistoryAndAnalytics();
+    } finally {
+      setSessionUIState(false);
+      await refreshDashboard();
+      if (viewHistory.style.display !== 'none') {
+        await refreshHistoryAndAnalytics();
+      }
     }
   });
 
-  // Quick subject tags
-  quickTags.forEach(tag => {
-    tag.addEventListener('click', () => {
-      if (!timer.isRunning()) {
-        subjectInput.value = tag.getAttribute('data-subject');
-        quickTags.forEach(t => t.classList.remove('selected'));
-        tag.classList.add('selected');
+  // Custom Subject Modal Logic
+  const customSubjectModal = document.getElementById('custom-subject-modal');
+  const btnCloseSubjectModal = document.getElementById('btn-close-subject-modal');
+  const btnCancelSubjectModal = document.getElementById('btn-cancel-subject-modal');
+  const formCustomSubject = document.getElementById('form-custom-subject');
+  const customSubjectInput = document.getElementById('custom-subject-input');
+
+  function openCustomSubjectModal() {
+    if (!customSubjectModal) return;
+    customSubjectModal.style.display = 'flex';
+    if (customSubjectInput) {
+      customSubjectInput.value = '';
+      setTimeout(() => customSubjectInput.focus(), 100);
+    }
+  }
+
+  function closeCustomSubjectModal() {
+    if (customSubjectModal) customSubjectModal.style.display = 'none';
+  }
+
+  if (btnCloseSubjectModal) btnCloseSubjectModal.addEventListener('click', closeCustomSubjectModal);
+  if (btnCancelSubjectModal) btnCancelSubjectModal.addEventListener('click', closeCustomSubjectModal);
+
+  if (formCustomSubject) {
+    formCustomSubject.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = customSubjectInput.value.trim();
+      if (val) {
+        if (Storage.addCustomTag) Storage.addCustomTag(val);
+        subjectInput.value = val;
+        renderQuickTags(val);
+        closeCustomSubjectModal();
       }
     });
-  });
+  }
 
-  // Daily Goal Editor
-  btnEditGoal.addEventListener('click', async () => {
+  // Daily Goal Modal Logic
+  const goalModal = document.getElementById('goal-modal');
+  const btnCloseGoalModal = document.getElementById('btn-close-goal-modal');
+  const btnCancelGoalModal = document.getElementById('btn-cancel-goal-modal');
+  const formDailyGoal = document.getElementById('form-daily-goal');
+  const customGoalInput = document.getElementById('custom-goal-input');
+
+  function openGoalModal() {
+    if (!goalModal) return;
     const currentGoalMinutes = Storage.getDailyGoalMinutes();
-    const currentGoalHours = (currentGoalMinutes / 60).toFixed(1);
-    const input = prompt('Enter your daily study target in hours (e.g., 2, 3.5, 4):', currentGoalHours);
-    
-    if (input !== null) {
-      const hours = parseFloat(input);
+    if (customGoalInput) {
+      customGoalInput.value = (currentGoalMinutes / 60).toFixed(1);
+    }
+    goalModal.style.display = 'flex';
+    setTimeout(() => customGoalInput.focus(), 100);
+  }
+
+  function closeGoalModal() {
+    if (goalModal) goalModal.style.display = 'none';
+  }
+
+  if (btnCloseGoalModal) btnCloseGoalModal.addEventListener('click', closeGoalModal);
+  if (btnCancelGoalModal) btnCancelGoalModal.addEventListener('click', closeGoalModal);
+
+  if (formDailyGoal) {
+    formDailyGoal.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const hours = parseFloat(customGoalInput.value);
       if (!isNaN(hours) && hours > 0) {
         const minutes = Math.round(hours * 60);
         Storage.setDailyGoalMinutes(minutes);
         await refreshDashboard();
+        closeGoalModal();
       }
+    });
+  }
+
+  // Quick subject tags & Custom Tag creation
+  const quickTagsWrap = document.getElementById('quick-tags-wrap');
+
+  function renderQuickTags(selectedSubject = 'General') {
+    if (!quickTagsWrap) return;
+    const defaultSubjects = ['General', 'Data Structures', 'Operating Systems', 'Computer Networks', 'Mathematics'];
+    const customSubjects = Storage.getCustomTags ? Storage.getCustomTags() : [];
+    const allSubjects = Array.from(new Set([...defaultSubjects, ...customSubjects]));
+
+    let html = allSubjects.map(subj => {
+      const isSel = (subj.toLowerCase() === (selectedSubject || '').toLowerCase()) ? 'selected' : '';
+      return `<button type="button" class="quick-tag ${isSel}" data-subject="${escapeHtml(subj)}">${escapeHtml(subj)}</button>`;
+    }).join('');
+
+    html += `<button type="button" class="quick-tag-add" id="btn-add-quick-tag" title="Add Custom Subject Tag">+ Add Subject</button>`;
+
+    quickTagsWrap.innerHTML = html;
+
+    // Attach click listeners to tags
+    quickTagsWrap.querySelectorAll('.quick-tag').forEach(tag => {
+      tag.addEventListener('click', () => {
+        if (!timer.isRunning()) {
+          const subj = tag.getAttribute('data-subject');
+          subjectInput.value = subj;
+          quickTagsWrap.querySelectorAll('.quick-tag').forEach(t => t.classList.remove('selected'));
+          tag.classList.add('selected');
+        }
+      });
+    });
+
+    // Attach listener to Add button
+    const btnAddTag = document.getElementById('btn-add-quick-tag');
+    if (btnAddTag) {
+      btnAddTag.addEventListener('click', () => {
+        if (timer.isRunning()) return;
+        openCustomSubjectModal();
+      });
     }
-  });
+  }
+
+  renderQuickTags(subjectInput.value || 'General');
+
+  // Daily Goal Editor trigger
+  if (btnEditGoal) {
+    btnEditGoal.addEventListener('click', openGoalModal);
+  }
 
   // Clear all sessions (Dashboard quick action)
   if (btnClearAll) {

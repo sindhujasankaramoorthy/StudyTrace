@@ -56,10 +56,25 @@ app.get('*', (req, res) => {
 // Centralized Error Handling Middleware
 app.use(errorHandler);
 
+const os = require('os');
+function getLocalIpAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
 // Start HTTP Server
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
+  const localIp = getLocalIpAddress();
   console.log(`====================================================`);
   console.log(`🚀 StudyTrace Server running on http://localhost:${PORT}`);
+  console.log(`📱 Mobile Testing URL: http://${localIp}:${PORT}`);
   console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📦 MongoDB: ${process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/studytrace'}`);
   console.log(`====================================================`);

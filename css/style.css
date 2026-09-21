@@ -223,6 +223,40 @@ body {
   font-weight: 500;
 }
 
+.auto-tracked-badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: var(--emerald);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-focus-toggle {
+  font-size: 0.78rem;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: var(--emerald);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--transition);
+}
+
+.btn-focus-toggle.active {
+  background: var(--emerald);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+}
+
 .metric-card,
 .session-card,
 .chart-card,
@@ -483,6 +517,24 @@ body {
   background: var(--primary);
   color: #ffffff;
   border-color: var(--primary);
+}
+
+.quick-tag-add {
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px dashed var(--primary);
+  color: var(--primary);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.quick-tag-add:hover {
+  background: var(--primary);
+  color: #ffffff;
+  border-style: solid;
 }
 
 /* Timer Control Buttons */

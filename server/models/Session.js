@@ -48,6 +48,16 @@ const sessionSchema = new mongoose.Schema(
       enum: ['Phone Time', 'Laptop Active Time', 'General Focus'],
       default: 'Laptop Active Time'
     },
+    source: {
+      type: String,
+      enum: ['manual', 'study-mode'],
+      default: 'manual'
+    },
+    status: {
+      type: String,
+      enum: ['active', 'completed', 'cancelled'],
+      default: 'completed'
+    },
     createdAt: {
       type: Date,
       default: Date.now,

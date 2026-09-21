@@ -11,19 +11,24 @@ const SessionStore = require('../services/sessionStore');
  */
 const createSession = async (req, res, next) => {
   try {
-    const { subject, startTime, endTime, duration, device } = req.body;
+    const { subject, startTime, endTime, duration, device, deviceCategory, clientSessionId, source, status, notes } = req.body;
     const userId = req.user ? req.user.id : 'student-default';
 
     // Calculate duration in seconds if not provided
-    const sessionDuration = duration || Math.max(1, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000));
+    const sessionDuration = Math.max(1, parseInt(duration, 10) || Math.max(1, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000)));
 
     const newSession = await SessionStore.create({
       userId,
-      subject: subject || 'General Study',
+      subject: subject || (source === 'study-mode' ? 'Phone Focus Session' : 'General Study'),
       startTime: new Date(startTime),
       endTime: new Date(endTime),
       duration: sessionDuration,
-      device: device || 'Laptop'
+      device: device || 'Laptop',
+      deviceCategory: deviceCategory || (device === 'Mobile' ? 'Phone Time' : 'Laptop Active Time'),
+      source: source || 'manual',
+      status: status || 'completed',
+      clientSessionId,
+      notes
     });
 
     res.status(201).json({
@@ -43,14 +48,16 @@ const createSession = async (req, res, next) => {
 const getSessions = async (req, res, next) => {
   try {
     const userId = req.user ? req.user.id : 'student-default';
-    const { filter, date, subject, device } = req.query;
+    const { filter, date, subject, device, source, status } = req.query;
     
     const formattedSessions = await SessionStore.find({
       userId,
       filter,
       date,
       subject,
-      device
+      device,
+      source,
+      status
     });
 
     res.status(200).json({

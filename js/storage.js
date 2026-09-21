@@ -192,6 +192,35 @@ const Storage = {
     const parsed = Math.max(15, parseInt(minutes, 10) || DEFAULT_GOAL_MINUTES);
     localStorage.setItem(STORAGE_KEYS.DAILY_GOAL, JSON.stringify(parsed));
     return parsed;
+  },
+
+  /**
+   * Get user custom subject tags.
+   * @returns {Array<string>}
+   */
+  getCustomTags() {
+    try {
+      const data = localStorage.getItem('studytrace_custom_tags');
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  /**
+   * Add a custom subject tag.
+   * @param {string} tag
+   * @returns {Array<string>}
+   */
+  addCustomTag(tag) {
+    const cleanTag = (tag || '').trim();
+    if (!cleanTag) return this.getCustomTags();
+    const tags = this.getCustomTags();
+    if (!tags.includes(cleanTag)) {
+      tags.push(cleanTag);
+      localStorage.setItem('studytrace_custom_tags', JSON.stringify(tags));
+    }
+    return tags;
   }
 };
 

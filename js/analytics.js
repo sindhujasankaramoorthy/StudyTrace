@@ -54,7 +54,7 @@ const Analytics = {
 
     switch (filterType) {
       case 'today':
-        return sessions.filter(s => s.date === todayStr);
+        return sessions.filter(s => (s.date || (s.startTime ? this.getLocalDateString(new Date(s.startTime)) : '')) === todayStr);
 
       case 'week': {
         // Current calendar week starting Monday
@@ -76,12 +76,15 @@ const Analytics = {
 
       case 'month': {
         const yearMonth = todayStr.substring(0, 7); // 'YYYY-MM'
-        return sessions.filter(s => s.date && s.date.startsWith(yearMonth));
+        return sessions.filter(s => {
+          const dStr = s.date || (s.startTime ? this.getLocalDateString(new Date(s.startTime)) : '');
+          return dStr.startsWith(yearMonth);
+        });
       }
 
       case 'custom':
         if (!customDate) return sessions;
-        return sessions.filter(s => s.date === customDate);
+        return sessions.filter(s => (s.date || (s.startTime ? this.getLocalDateString(new Date(s.startTime)) : '')) === customDate);
 
       case 'all':
       default:
@@ -95,10 +98,11 @@ const Analytics = {
    * @returns {number}
    */
   getTodayTotalSeconds(sessions) {
+    if (!sessions || !Array.isArray(sessions)) return 0;
     const todayStr = this.getLocalDateString(new Date());
     return sessions
-      .filter(s => s.date === todayStr)
-      .reduce((sum, s) => sum + (s.durationSeconds || 0), 0);
+      .filter(s => (s.date || (s.startTime ? this.getLocalDateString(new Date(s.startTime)) : '')) === todayStr)
+      .reduce((sum, s) => sum + (Number(s.durationSeconds !== undefined ? s.durationSeconds : s.duration) || 0), 0);
   },
 
   /**
@@ -107,8 +111,9 @@ const Analytics = {
    * @returns {number}
    */
   getTodaySessionCount(sessions) {
+    if (!sessions || !Array.isArray(sessions)) return 0;
     const todayStr = this.getLocalDateString(new Date());
-    return sessions.filter(s => s.date === todayStr).length;
+    return sessions.filter(s => (s.date || (s.startTime ? this.getLocalDateString(new Date(s.startTime)) : '')) === todayStr).length;
   },
 
   /**
@@ -118,8 +123,8 @@ const Analytics = {
    * @returns {Object}
    */
   calculateDetailedMetrics(filteredSessions, allSessions) {
-    const totalSeconds = filteredSessions.reduce((sum, s) => sum + (s.durationSeconds || 0), 0);
-    const totalSessions = filteredSessions.length;
+    const totalSeconds = (filteredSessions || []).reduce((sum, s) => sum + (Number(s.durationSeconds !== undefined ? s.durationSeconds : s.duration) || 0), 0);
+    const totalSessions = (filteredSessions || []).length;
 
     // Distinct active study days in this filtered range
     const activeDates = new Set(

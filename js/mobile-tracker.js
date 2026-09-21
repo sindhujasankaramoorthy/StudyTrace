@@ -40,6 +40,8 @@ window.MobileTracker = {
             category: "General",
             deviceCategory: "Phone Time",
             device: "Mobile",
+            source: "study-mode",
+            status: "completed",
             startTime: this.startTime.toISOString(),
             endTime: endTime.toISOString(),
             duration: durationSeconds,

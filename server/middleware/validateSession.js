@@ -29,20 +29,20 @@ const validateSessionInput = (req, res, next) => {
     }
   }
 
-  // Validate duration or auto-calculate if missing
-  let computedDuration = duration;
-  if (computedDuration === undefined || computedDuration === null) {
+  // Validate duration or auto-calculate if missing/invalid
+  let computedDuration = Number(duration);
+  if (isNaN(computedDuration) || computedDuration < 1) {
     if (startTime && endTime) {
       computedDuration = Math.max(1, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000));
-      req.body.duration = computedDuration;
+    } else {
+      computedDuration = 1;
     }
-  } else if (typeof computedDuration !== 'number' || computedDuration < 1) {
-    errors.push('duration must be a positive number of seconds');
   }
+  req.body.duration = computedDuration;
 
   // Validate device if provided
-  if (device && !['Laptop', 'Mobile', 'Desktop', 'Tablet'].includes(device)) {
-    errors.push('device must be Laptop, Mobile, Desktop, or Tablet');
+  if (device && typeof device === 'string' && device.length > 50) {
+    errors.push('device name cannot exceed 50 characters');
   }
 
   // Validate subject length

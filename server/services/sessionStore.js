@@ -121,6 +121,8 @@ class SessionStore {
           existing.subject = sessionData.subject || existing.subject;
           existing.device = sessionData.device || existing.device;
           existing.deviceCategory = sessionData.deviceCategory || existing.deviceCategory;
+          existing.source = sessionData.source || existing.source;
+          existing.status = sessionData.status || existing.status;
           await existing.save();
 
           const obj = existing.toObject({ virtuals: true });
@@ -154,6 +156,8 @@ class SessionStore {
         existingMem.subject = sessionData.subject || existingMem.subject;
         existingMem.device = sessionData.device || existingMem.device;
         existingMem.deviceCategory = sessionData.deviceCategory || existingMem.deviceCategory;
+        existingMem.source = sessionData.source || existingMem.source;
+        existingMem.status = sessionData.status || existingMem.status;
         return existingMem;
       }
     }
@@ -171,6 +175,8 @@ class SessionStore {
       durationSeconds: Number(sessionData.duration),
       device: sessionData.device || 'Laptop',
       deviceCategory: sessionData.deviceCategory || 'Laptop Active Time',
+      source: sessionData.source || 'manual',
+      status: sessionData.status || 'completed',
       date: getLocalDateString(sessionData.startTime),
       createdAt: new Date()
     };
@@ -182,13 +188,15 @@ class SessionStore {
    * Find sessions matching criteria
    */
   static async find(query = {}) {
-    const { userId = 'student-default', filter, date, subject, device, deviceCategory } = query;
+    const { userId = 'student-default', filter, date, subject, device, deviceCategory, source, status } = query;
 
     if (isDBConnected()) {
       const dbQuery = { userId };
       if (subject) dbQuery.subject = new RegExp(subject, 'i');
       if (device) dbQuery.device = device;
       if (deviceCategory) dbQuery.deviceCategory = deviceCategory;
+      if (source) dbQuery.source = source;
+      if (status) dbQuery.status = status;
 
       const today = new Date();
       if (filter === 'today') {

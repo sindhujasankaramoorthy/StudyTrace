@@ -190,6 +190,9 @@
               Current Session
             </h2>
             <div class="status-group">
+              <button type="button" class="btn-focus-toggle" id="btn-toggle-phone-focus" title="Toggle Phone Study/Focus Mode">
+                📱 Phone Study Mode: <span id="phone-focus-status-text">OFF</span>
+              </button>
               <span class="tracker-badge" id="laptop-tracker-badge" title="Monitors active keyboard & mouse interactions">💻 Active Device Monitor</span>
               <div class="status-badge">
                 <span class="status-dot idle" id="timer-status-dot"></span>
@@ -212,15 +215,16 @@
               id="subject-input" 
               class="text-input" 
               placeholder="e.g., Computer Networks, Algorithms, Math..." 
-              value="Data Structures"
+              value="General"
               autocomplete="off"
             />
-            <div class="quick-tags-wrap" aria-label="Quick Subject Tags">
-              <button type="button" class="quick-tag selected" data-subject="Data Structures">Data Structures</button>
+            <div class="quick-tags-wrap" id="quick-tags-wrap" aria-label="Quick Subject Tags">
+              <button type="button" class="quick-tag selected" data-subject="General">General</button>
+              <button type="button" class="quick-tag" data-subject="Data Structures">Data Structures</button>
               <button type="button" class="quick-tag" data-subject="Operating Systems">Operating Systems</button>
               <button type="button" class="quick-tag" data-subject="Computer Networks">Networks</button>
               <button type="button" class="quick-tag" data-subject="Mathematics">Mathematics</button>
-              <button type="button" class="quick-tag" data-subject="General Study">General</button>
+              <button type="button" class="quick-tag-add" id="btn-add-quick-tag" title="Add Custom Subject Tag">+ Add Subject</button>
             </div>
           </div>
 
@@ -544,6 +548,54 @@
       <div class="auth-footer-note">
         <span>🔒 Secured with JWT & bcrypt password hashing</span>
       </div>
+    </div>
+  </div>
+
+  <!-- Custom Subject Modal Overlay -->
+  <div id="custom-subject-modal" class="auth-modal-overlay" style="display: none;">
+    <div class="auth-modal-card" style="max-width: 420px;">
+      <button type="button" class="btn-close-modal" id="btn-close-subject-modal" aria-label="Close modal">&times;</button>
+
+      <div class="auth-brand-head">
+        <div class="auth-brand-icon" aria-hidden="true">📚</div>
+        <h2 class="auth-title">Add Custom Subject</h2>
+        <p>Create a new quick tag for your focused study sessions</p>
+      </div>
+
+      <form id="form-custom-subject" class="auth-form">
+        <div class="form-group">
+          <label for="custom-subject-input">Subject / Topic Name</label>
+          <input type="text" id="custom-subject-input" class="auth-input" placeholder="e.g. Artificial Intelligence, Physics..." required autocomplete="off">
+        </div>
+        <div style="display: flex; gap: 12px; margin-top: 16px;">
+          <button type="button" class="btn-secondary-sm" id="btn-cancel-subject-modal" style="flex: 1; padding: 12px; font-size: 0.9rem;">Cancel</button>
+          <button type="submit" class="btn-auth-submit" style="flex: 1; margin-top: 0; padding: 12px; font-size: 0.9rem;">Add Subject</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Daily Goal Modal Overlay -->
+  <div id="goal-modal" class="auth-modal-overlay" style="display: none;">
+    <div class="auth-modal-card" style="max-width: 420px;">
+      <button type="button" class="btn-close-modal" id="btn-close-goal-modal" aria-label="Close modal">&times;</button>
+
+      <div class="auth-brand-head">
+        <div class="auth-brand-icon" aria-hidden="true">🎯</div>
+        <h2 class="auth-title">Set Daily Target</h2>
+        <p>Enter your target daily study goal in hours</p>
+      </div>
+
+      <form id="form-daily-goal" class="auth-form">
+        <div class="form-group">
+          <label for="custom-goal-input">Daily Target (Hours)</label>
+          <input type="number" step="0.5" min="0.5" max="24" id="custom-goal-input" class="auth-input" placeholder="e.g. 3.0" required autocomplete="off">
+        </div>
+        <div style="display: flex; gap: 12px; margin-top: 16px;">
+          <button type="button" class="btn-secondary-sm" id="btn-cancel-goal-modal" style="flex: 1; padding: 12px; font-size: 0.9rem;">Cancel</button>
+          <button type="submit" class="btn-auth-submit" style="flex: 1; margin-top: 0; padding: 12px; font-size: 0.9rem;">Save Target</button>
+        </div>
+      </form>
     </div>
   </div>
 

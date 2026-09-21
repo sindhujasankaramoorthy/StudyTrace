@@ -148,13 +148,23 @@ const API = {
     }
 
     const user = Auth.getUser();
+    const durationSec = Math.max(1, parseInt(sessionData.durationSeconds || sessionData.duration, 10) || 1);
+    
+    // Ensure valid ISO startTime and endTime
+    const startTimeIso = sessionData.startTime ? new Date(sessionData.startTime).toISOString() : new Date().toISOString();
+    const endTimeIso = sessionData.endTime ? new Date(sessionData.endTime).toISOString() : new Date().toISOString();
+
     const payload = {
       userId: user ? user.id : null,
-      subject: sessionData.subject || 'General Study',
-      startTime: sessionData.startTime,
-      endTime: sessionData.endTime,
-      duration: sessionData.durationSeconds || sessionData.duration,
-      device: sessionData.device || 'Laptop'
+      subject: sessionData.subject || (sessionData.source === 'study-mode' ? 'Phone Focus Session' : 'General Study'),
+      startTime: startTimeIso,
+      endTime: endTimeIso,
+      duration: durationSec,
+      device: sessionData.device || 'Laptop',
+      deviceCategory: sessionData.deviceCategory || (sessionData.device === 'Mobile' ? 'Phone Time' : 'Laptop Active Time'),
+      source: sessionData.source || 'manual',
+      status: sessionData.status || 'completed',
+      clientSessionId: sessionData.clientSessionId || ('web_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7))
     };
 
     try {
